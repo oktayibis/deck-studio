@@ -1,0 +1,28 @@
+{
+  "name": "deck-studio",
+  "version": "1.0.0",
+  "description": "AI-powered, brand-true presentation builder with interactive HTML deck engine, headless brand/quality checker, and MCP server",
+  "type": "module",
+  "main": "src/server/index.js",
+  "scripts": {
+    "start": "node src/server/index.js",
+    "dev": "node src/server/index.js",
+    "check": "node src/cli/check-deck.js",
+    "mcp": "node src/mcp/server.js",
+    "seed": "node src/cli/seed.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "fast-xml-parser": "^4.5.1",
+    "jszip": "^3.10.1",
+    "multer": "^1.4.5-lts.1",
+    "playwright-core": "^1.50.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

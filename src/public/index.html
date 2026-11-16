@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deck Studio — Brand-True AI Presentation Builder</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Top Broadcast Navigation Bar -->
+  <header class="app-topbar">
+    <div class="brand-mark">
+      <div class="brand-mark-diamond">DS</div>
+      <div>
+        <div class="brand-mark-title">DECK STUDIO</div>
+        <div class="brand-mark-sub">BRAND-TRUE AI PRESENTATION ENGINE</div>
+      </div>
+    </div>
+
+    <nav class="app-nav" role="tablist" aria-label="Product surfaces">
+      <button type="button" class="nav-tab active" data-view="studio">01 · STUDIO</button>
+      <button type="button" class="nav-tab" data-view="brand">02 · BRAND SETUP</button>
+      <button type="button" class="nav-tab" data-view="library">03 · LIBRARY</button>
+      <button type="button" class="nav-tab" data-view="gallery">04 · COMPONENT GALLERY</button>
+      <button type="button" class="nav-tab" data-view="saas">05 · PLANS, QUOTAS &amp; COST LAB</button>
+    </nav>
+
+    <div class="topbar-right">
+      <button type="button" class="quota-pill" id="header-quota-pill" title="Click to configure SaaS subscription quotas (2/4/16 brands, 4/20/100 daily decks)">
+        <span class="quota-dot"></span>
+        <span id="header-quota-text">PRO · 2/4 Brands · 0/20 Today</span>
+      </button>
+      <select class="ui-select" id="header-brand-select" aria-label="Select Active Brand Kit" style="width: 245px; padding: 6px 10px; font-family: var(--ui-mono); font-size: 12px;"></select>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       SURFACE 1: STUDIO (Brief Composer, Media Tray, Activity, Viewer & Refine)
+       ======================================================================== -->
+  <main id="view-studio" class="view-panel active">
+    <div class="studio-layout">
+      <!-- Left Column: Brief Composer & Media Tray -->
+      <section class="panel-card" aria-label="Brief composer">
+        <div class="panel-header">
+          <span class="panel-title">BRIEF COMPOSER</span>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn btn-sm active" id="mode-new-btn">New Deck</button>
+            <button type="button" class="btn btn-sm" id="mode-edit-btn">Edit Selected</button>
+          </div>
+        </div>
+
+        <!-- Starter Templates -->
+        <div class="field-group">
+          <div class="field-label">
+            <span>STARTER TEMPLATES</span>
+            <button type="button" class="starter-chip" id="load-full-sample-btn" style="border-color:var(--ui-accent);color:#FFF;">★ Load Incident Brief + 2 Screenshots + 1 Video</button>
+          </div>
+          <div class="chip-row">
+            <button type="button" class="starter-chip" data-starter="postmortem">Post-Mortem (March Incident)</button>
+            <button type="button" class="starter-chip" data-starter="demo">Feature Demo</button>
+            <button type="button" class="starter-chip" data-starter="status">Status Update</button>
+            <button type="button" class="starter-chip" data-starter="howitworks">How It Works</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="studio-brand-select">
+            <span>BRAND KIT (VERSIONED)</span>
+            <span id="studio-brand-badge" style="color:var(--ui-accent);">DanishCVI v1</span>
+          </label>
+          <select id="studio-brand-select" class="ui-select"></select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="brief-topic">
+            <span>PRESENTATION BRIEF &amp; FACTS</span>
+            <span>Auto-saved draft</span>
+          </label>
+          <textarea id="brief-topic" class="ui-textarea" placeholder="e.g. 10-minute talk for management about the March 12 EU-Central-1 database pool incident..."></textarea>
+        </div>
+
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label" for="brief-audience">AUDIENCE</label>
+            <select id="brief-audience" class="ui-select">
+              <option value="management">Management (KPIs, Bars, Timeline — No Code)</option>
+              <option value="developers">Developers (Flow Trace, Code, Chat, Checklist)</option>
+              <option value="product">Product (Journeys, Screenshots, Before/After)</option>
+              <option value="mixed">Mixed Executive &amp; Technical</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="brief-length">LENGTH (MINUTES)</label>
+            <input type="number" id="brief-length" class="ui-input" value="10" min="3" max="60" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label" for="brief-language">LANGUAGE</label>
+            <select id="brief-language" class="ui-select">
+              <option value="en">English (en)</option>
+              <option value="da">Danish (da)</option>
+              <option value="de">German (de)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="brief-slug">AUTO DECK SLUG (KEBAB-CASE)</label>
+            <input type="text" id="brief-slug" class="ui-input" placeholder="march-incident-talk" />
+          </div>
+        </div>
+
+        <div class="field-row" style="align-items:center;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:var(--ui-mono);font-size:12px;">
+            <input type="checkbox" id="brief-demo-toggle" checked />
+            <span>Ends with live demo</span>
+          </label>
+          <input type="text" id="brief-source-url" class="ui-input" placeholder="Optional source URL or doc ref" />
+        </div>
+
+        <!-- Media Tray (Drag & Drop, Paste ⌘V, File Picker) -->
+        <div class="field-group">
+          <div class="field-label">
+            <span>MEDIA EVIDENCE TRAY (IMAGES ≤25MB · VIDEO ≤400MB)</span>
+            <span id="media-count-badge">0 items</span>
+          </div>
+          <div class="media-dropzone" id="media-dropzone" tabindex="0" role="button" aria-label="Upload or paste screenshots and videos">
+            Drag &amp; drop screenshots or video here, press <code>⌘V</code> to paste, or <strong>click to browse</strong>
+            <input type="file" id="media-file-input" multiple accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.mp4,.webm,.mov" style="display:none;" />
+          </div>
+          <div class="media-tray-list" id="media-tray-list"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;">
+          <button type="button" class="btn btn-primary" id="build-deck-btn" style="flex:1;padding:11px;">
+            ▶ Build Brand-True Deck
+          </button>
+          <button type="button" class="btn btn-danger" id="stop-job-btn" style="display:none;">
+            ■ Stop
+          </button>
+        </div>
+
+        <!-- Edit Selected Mode Box -->
+        <div id="refine-panel-box" style="border-top:1px solid var(--ui-border);padding-top:12px;display:flex;flex-direction:column;gap:8px;">
+          <div class="field-label">
+            <span>REFINE SELECTED DECK IN PLACE (§3.3)</span>
+            <button type="button" class="btn btn-sm" id="undo-deck-btn" title="Revert to previous deck version">↺ Undo Last Edit</button>
+          </div>
+          <div class="chip-row">
+            <button type="button" class="starter-chip" data-refine="make slide 4 simpler">"make slide 4 simpler"</button>
+            <button type="button" class="starter-chip" data-refine="add a timeline of the outage">"add a timeline of the outage"</button>
+            <button type="button" class="starter-chip" data-refine="use the second screenshot on the cover">"use the second screenshot on the cover"</button>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="refine-prompt-input" class="ui-input" placeholder="e.g. make slide 4 simpler..." />
+            <button type="button" class="btn btn-primary" id="apply-refine-btn">Refine</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Live Deck Player, Activity Stream, Check Report & Deck Strip -->
+      <section style="display:flex;flex-direction:column;gap:18px;">
+        <!-- Viewer Card -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span class="panel-title" id="viewer-deck-title">LIVE DECK VIEWER</span>
+              <span class="badge badge-pass" id="viewer-check-badge">CHECK PASSED</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <button type="button" class="btn btn-sm" id="viewer-prev-btn">← Prev</button>
+              <button type="button" class="btn btn-sm" id="viewer-next-btn">Next →</button>
+              <button type="button" class="btn btn-sm" id="viewer-check-btn">✓ Run Check</button>
+              <button type="button" class="btn btn-sm btn-primary" id="viewer-present-btn">⛶ Present Fullscreen</button>
+              <button type="button" class="btn btn-sm" id="viewer-presenter-btn">⧉ Presenter View (S)</button>
+              <a class="btn btn-sm" id="viewer-export-zip" href="#" download>⬇ Export ZIP</a>
+              <a class="btn btn-sm" id="viewer-export-pdf" href="#" download>⬇ Export PDF</a>
+            </div>
+          </div>
+
+          <div class="preview-frame-wrap">
+            <iframe id="studio-preview-iframe" class="preview-iframe" title="Interactive Deck Preview"></iframe>
+          </div>
+        </div>
+
+        <!-- Split: Agent Activity Panel + Automatic Quality & Brand Check Report -->
+        <div style="display:grid;grid-template-columns:1fr 1.15fr;gap:18px;">
+          <div class="panel-card">
+            <div class="panel-header">
+              <span class="panel-title">AGENT WORKFLOW &amp; TELEMETRY</span>
+              <span id="agent-phase-badge" class="badge badge-pass">IDLE / READY</span>
+            </div>
+            <div class="activity-list" id="agent-activity-list">
+              <div class="activity-step">
+                <span>Ready. Select a Brand Kit (e.g. DanishCVI), attach media, and press Build.</span>
+                <span>0.0s</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-header">
+              <span class="panel-title">HEADLESS BRAND &amp; QUALITY CHECK (§7)</span>
+              <span id="check-summary-badge" class="badge badge-pass">0 Errors</span>
+            </div>
+            <div class="activity-list" id="check-slides-list"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       SURFACE 2: BRAND SETUP (Office .pptx/.potx/.thmx Upload, DanishCVI Editor, WCAG & Gallery)
+       ======================================================================== -->
+  <main id="view-brand" class="view-panel">
+    <div style="display:grid;grid-template-columns:460px 1fr;gap:22px;align-items:start;">
+      <!-- Left: Create New Brand / Upload Template & Token Editor -->
+      <section style="display:flex;flex-direction:column;gap:18px;">
+        <!-- Create / Extract Brand Card -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <span class="panel-title">ADD NEW BRAND KIT (QUOTA ENFORCED)</span>
+            <span class="badge badge-pass" id="brand-quota-badge">2 / 4 Brands</span>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="new-brand-name">BRAND NAME (E.G. DanishCVI, AcmeNordic)</label>
+            <input type="text" id="new-brand-name" class="ui-input" placeholder="e.g. DanishCVI" value="DanishCVI" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="new-brand-file">UPLOAD OFFICE TEMPLATE (.pptx, .potx, .thmx)</label>
+            <input type="file" id="new-brand-file" class="ui-input" accept=".pptx,.potx,.thmx" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="new-brand-sample">OR LOAD REAL SAMPLE OFFICE TEMPLATE</label>
+            <select id="new-brand-sample" class="ui-select"></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="new-brand-guidelines">OPTIONAL BRAND GUIDELINES / HEX / URL NOTES</label>
+            <textarea id="new-brand-guidelines" class="ui-textarea" style="min-height:64px;" placeholder="e.g. Primary #1E293B, Action Accent #B83214, Logo top-right on cover & end slides only..."></textarea>
+          </div>
+          <button type="button" class="btn btn-primary" id="create-brand-btn">
+            + Extract &amp; Create New Brand Kit
+          </button>
+        </div>
+
+        <!-- Edit Active Brand Tokens Card -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <span class="panel-title" id="active-brand-editor-title">EDIT ACTIVE BRAND TOKENS</span>
+            <span class="badge badge-pass" id="active-brand-version-badge">v1</span>
+          </div>
+
+          <div class="field-label">SEMANTIC COLOUR ROLES (CLICK TO ADJUST)</div>
+          <div class="swatch-grid" id="brand-color-swatches"></div>
+
+          <div class="field-row">
+            <div class="field-group">
+              <label class="field-label" for="brand-font-title">TITLE FONT</label>
+              <input type="text" id="brand-font-title" class="ui-input" />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="brand-font-fallback">APPROVED FALLBACK</label>
+              <select id="brand-font-fallback" class="ui-select">
+                <option value="Instrument Serif">Instrument Serif</option>
+                <option value="Fraunces">Fraunces</option>
+                <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+                <option value="IBM Plex Sans">IBM Plex Sans</option>
+                <option value="Georgia">Georgia</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="brand-font-warning-box" style="display:none;padding:10px;border-radius:6px;background:rgba(245,158,11,0.14);border:1px solid var(--ui-caution);color:#FCD34D;font-size:12px;"></div>
+
+          <div class="field-row">
+            <div class="field-group">
+              <label class="field-label" for="brand-logo-placement">LOGO PLACEMENT (COVER &amp; END ONLY)</label>
+              <select id="brand-logo-placement" class="ui-select">
+                <option value="top-right">top-right</option>
+                <option value="top-left">top-left</option>
+                <option value="bottom-right">bottom-right</option>
+                <option value="bottom-left">bottom-left</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="brand-classification">DEFAULT CLASSIFICATION</label>
+              <select id="brand-classification" class="ui-select">
+                <option value="Internal">Internal</option>
+                <option value="Public">Public</option>
+                <option value="Confidential">Confidential</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="upload-font-input">UPLOAD CORPORATE FONT (.woff2, .ttf, .otf — ORG ISOLATED)</label>
+            <div style="display:flex;gap:8px;">
+              <input type="file" id="upload-font-input" class="ui-input" accept=".woff2,.woff,.ttf,.otf" />
+              <button type="button" class="btn" id="upload-font-btn">Upload Font</button>
+            </div>
+            <span style="font-size:11px;color:var(--ui-ink-muted);">⚠️ Licensing rule: Uploaded fonts stay private per organisation. Decks exported with embedded fonts must stay internal.</span>
+          </div>
+
+          <button type="button" class="btn btn-primary" id="save-brand-version-btn">
+            Save as New Brand Kit Version (Updates Referencing Decks)
+          </button>
+        </div>
+      </section>
+
+      <!-- Right: Live Brand Preview Gallery + WCAG AA Matrix + Extracted Geometry -->
+      <section style="display:flex;flex-direction:column;gap:18px;">
+        <div class="panel-card">
+          <div class="panel-header">
+            <span class="panel-title">LIVE BRAND PREVIEW GALLERY (ALL SLIDE TYPES &amp; COMPONENTS)</span>
+            <button type="button" class="btn btn-sm" id="run-gallery-check-btn">✓ Run Headless Check on Gallery</button>
+          </div>
+          <div class="preview-frame-wrap">
+            <iframe id="brand-gallery-iframe" class="preview-iframe" title="Brand Kit Live Preview Gallery"></iframe>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+          <div class="panel-card">
+            <div class="panel-header">
+              <span class="panel-title">WCAG AA CONTRAST VALIDATION</span>
+              <span class="badge badge-pass" id="brand-contrast-badge">WCAG AA PASS</span>
+            </div>
+            <table class="ui-table">
+              <thead>
+                <tr>
+                  <th>Surface / Role Pair</th>
+                  <th>Colours</th>
+                  <th>Ratio</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="brand-contrast-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-header">
+              <span class="panel-title">EXTRACTED TEMPLATE GEOMETRY (INCHES → 1600×900 PX)</span>
+            </div>
+            <table class="ui-table">
+              <thead>
+                <tr>
+                  <th>Placeholder</th>
+                  <th>Template Inches (x, y, w, h)</th>
+                  <th>Stage Pixels (1600×900)</th>
+                </tr>
+              </thead>
+              <tbody id="brand-geometry-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       SURFACE 3: LIBRARY (All Decks, Live Cover Thumbnails, Search & Actions)
+       ======================================================================== -->
+  <main id="view-library" class="view-panel">
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="panel-title">PRESENTATION LIBRARY (STATIC LIVE COVER THUMBNAILS)</span>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input type="search" id="library-search-input" class="ui-input" placeholder="Search decks by title, slug, or audience..." style="width:320px;" />
+        </div>
+      </div>
+      <div class="deck-grid" id="library-deck-grid"></div>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       SURFACE 4: COMPONENT GALLERY (Full-Width Interactive Visual Test Fixture)
+       ======================================================================== -->
+  <main id="view-gallery" class="view-panel">
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="panel-title">COMPONENT GALLERY &amp; VISUAL TEST FIXTURE (ALL 8 SLIDE TYPES &amp; 15+ COMPONENTS)</span>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-sm" id="gallery-fullscreen-btn">⛶ Present Gallery Fullscreen</button>
+          <a class="btn btn-sm" href="/api/gallery/preview" target="_blank">↗ Open Standalone Tab</a>
+        </div>
+      </div>
+      <div class="preview-frame-wrap" style="max-width:1360px;margin:0 auto;">
+        <iframe id="full-gallery-iframe" class="preview-iframe" title="Full Component Gallery"></iframe>
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       SURFACE 5: SAAS PLANS, QUOTAS (2/4/16 & 4/20/100), COST LAB & ENTERPRISE
+       ======================================================================== -->
+  <main id="view-saas" class="view-panel">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;">
+      <!-- Left: Configurable Subscription Tiers (2/4/16 Brands & 4/20/100 Daily Decks) -->
+      <section class="panel-card">
+        <div class="panel-header">
+          <span class="panel-title">SAAS SUBSCRIPTION TIERS &amp; CONFIGURABLE QUOTAS</span>
+          <span class="badge badge-pass" id="saas-active-tier-badge">PRO PLAN</span>
+        </div>
+
+        <p style="color:var(--ui-ink-muted);font-size:13px;">
+          Switch between plans or tune the exact <strong>Brand Limit (default: 2 / 4 / 16)</strong> and <strong>Daily Deck Limit (default: 4 / 20 / 100)</strong> to test quota enforcement and unit economics.
+        </p>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;" id="plan-cards-container">
+          <!-- Populated dynamically from /api/bootstrap -->
+        </div>
+
+        <div style="border-top:1px solid var(--ui-border);padding-top:14px;display:flex;flex-direction:column;gap:12px;">
+          <div class="panel-title">DYNAMIC QUOTA TUNING (2 / 4 / 16 BRANDS · 4 / 20 / 100 DAILY DECKS)</div>
+          <table class="ui-table">
+            <thead>
+              <tr>
+                <th>Tier</th>
+                <th>Max Brands Quota</th>
+                <th>Daily Presentation Limit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Starter</strong></td>
+                <td><input type="number" id="q-starter-brands" class="ui-input" value="2" min="1" max="100" /></td>
+                <td><input type="number" id="q-starter-decks" class="ui-input" value="4" min="1" max="500" /></td>
+              </tr>
+              <tr>
+                <td><strong>Pro</strong></td>
+                <td><input type="number" id="q-pro-brands" class="ui-input" value="4" min="1" max="100" /></td>
+                <td><input type="number" id="q-pro-decks" class="ui-input" value="20" min="1" max="500" /></td>
+              </tr>
+              <tr>
+                <td><strong>Enterprise</strong></td>
+                <td><input type="number" id="q-ent-brands" class="ui-input" value="16" min="1" max="500" /></td>
+                <td><input type="number" id="q-ent-decks" class="ui-input" value="100" min="1" max="2000" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="display:flex;gap:10px;">
+            <button type="button" class="btn btn-primary" id="save-quotas-btn">Save Quota Limits</button>
+            <button type="button" class="btn" id="reset-today-usage-btn">Reset Today's Deck Counter (0)</button>
+          </div>
+        </div>
+
+        <!-- Unit Economics & Cost Investigation Table -->
+        <div style="border-top:1px solid var(--ui-border);padding-top:14px;display:flex;flex-direction:column;gap:10px;">
+          <div class="panel-title">COST INVESTIGATION &amp; UNIT ECONOMICS TELEMETRY</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;" id="cost-summary-cards"></div>
+          <table class="ui-table">
+            <thead>
+              <tr>
+                <th>Deck</th>
+                <th>Operation</th>
+                <th>Tokens (In/Out)</th>
+                <th>Render Time</th>
+                <th>Est. Cost</th>
+              </tr>
+            </thead>
+            <tbody id="cost-history-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Right: Enterprise LLM Provider, Privacy Guards, MCP Tools & Audit Log -->
+      <section style="display:flex;flex-direction:column;gap:18px;">
+        <div class="panel-card">
+          <div class="panel-header">
+            <span class="panel-title">ENTERPRISE LLM PROVIDER, SSO &amp; PRIVACY GUARDS (§9)</span>
+          </div>
+          <div class="field-row">
+            <div class="field-group">
+              <label class="field-label" for="ent-llm-provider">LLM PROVIDER (PER ORGANISATION)</label>
+              <select id="ent-llm-provider" class="ui-select">
+                <option value="local-structured">Local Structured Agent (Deterministic / Air-Gapped)</option>
+                <option value="openai">OpenAI (GPT-4o Tool Calling)</option>
+                <option value="azure">Azure OpenAI Service</option>
+                <option value="anthropic">Anthropic Claude</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="internal-gateway">Company Internal LLM Gateway</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="ent-role-select">ACTIVE RBAC ROLE</label>
+              <select id="ent-role-select" class="ui-select">
+                <option value="brand_admin">brand_admin (Full Brand &amp; Org Admin)</option>
+                <option value="editor">editor (Create &amp; Edit Decks)</option>
+                <option value="viewer">viewer (Present &amp; View Only)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--ui-mono);font-size:12px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="ent-internal-net" checked />
+              <span>Keep all data and LLM traffic inside the company network</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="ent-forbid-media" />
+              <span>Forbid sending media binaries to external LLMs (fall back to captions only)</span>
+            </label>
+          </div>
+          <button type="button" class="btn btn-primary" id="save-ent-settings-btn">Save Enterprise Policy</button>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header">
+            <span class="panel-title">AUDIT LOG OF BRAND CHANGES, DECK BUILDS &amp; EXPORTS</span>
+          </div>
+          <div class="activity-list" id="audit-log-list" style="max-height:260px;"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast-banner" id="toast-banner" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
