@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import JSZip from 'jszip';
 
 import {
@@ -426,4 +427,32 @@ test('8. ADLC Features: Brand Guidelines Crawler (#5), SQLite DatabaseAdapter (#
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('9. Phase 2: StorageService SQLite auto-sync (data/deck_studio.sqlite) & TypeScript controller (src/public/app.ts)', async () => {
+  // Verify StorageService initialized storage.db pointing to data/deck_studio.sqlite
+  const expectedSqlitePath = path.join(process.cwd(), 'data', 'deck_studio.sqlite');
+  assert.ok(storage.db, 'Expected storage.db DatabaseAdapter instance on StorageService');
+  assert.equal(storage.db.dbPath, expectedSqlitePath);
+  assert.ok(fs.existsSync(expectedSqlitePath), 'Expected data/deck_studio.sqlite to exist on disk');
+
+  // Verify saveOrgState() automatically syncs TEST_ORG into relational SQLite tables
+  const state = storage.loadOrgState(TEST_ORG);
+  storage.saveOrgState(TEST_ORG, state);
+
+  const syncedOrg = await storage.db.getOrganisation(TEST_ORG);
+  assert.ok(syncedOrg, 'Expected TEST_ORG to be synced into SQLite organisations table');
+  assert.equal(syncedOrg.id, TEST_ORG);
+
+  const syncedBrands = await storage.db.listBrandKits(TEST_ORG);
+  assert.ok(syncedBrands.length >= 1, 'Expected synced brand kits in SQLite');
+
+  const syncedDeck = await storage.db.getDeck(TEST_ORG, 'march-incident-danishcvi');
+  assert.ok(syncedDeck && syncedDeck.slug === 'march-incident-danishcvi', 'Expected synced deck in SQLite');
+
+  // Verify src/public/app.ts exists and compiles cleanly under npx tsc --noEmit
+  const appTsPath = path.join(process.cwd(), 'src', 'public', 'app.ts');
+  assert.ok(fs.existsSync(appTsPath), 'Expected src/public/app.ts to exist');
+  const tscOut = execFileSync('npx', ['tsc', '--noEmit'], { encoding: 'utf8' });
+  assert.equal(tscOut.trim(), '', 'Expected npx tsc --noEmit to produce 0 errors');
 });

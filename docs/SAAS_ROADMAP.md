@@ -2,44 +2,43 @@
 
 This document is the **single source of truth** inside the repository for tracking Deck Studio's SaaS architecture, development phases, model-tiered ADLC workflow, and GitHub Issues / Pull Requests.
 
+For the full product vision, user journeys, and architectural specification, see **[docs/PRODUCT_VISION_AND_ARCHITECTURE.md](./PRODUCT_VISION_AND_ARCHITECTURE.md)**.
+
 ---
 
-## 1. ADLC (Agentic Development Life Cycle) & Cost Strategy
+## 1. ADLC (Agentic Development Life Cycle) & Model Routing Strategy
 
-To move fast while keeping AI/LLM token costs low, all development work is split across three model tiers and tracked via GitHub Issues & PRs:
+To move fast while preserving `Gemini 4 Argon (High)` quota, all development work is routed across three model tiers via the `swarm` tool and tracked via GitHub Issues & PRs:
 
-| Tier | Model | Subagent | Cost Profile | Responsibilities |
+| Tier | `swarm` Model | Cost Profile | Responsibilities |
+| :--- | :--- | :--- | :--- |
+| **Tier 1 (Ultra-Light)** | `gemini-4-hydrogen-low` | **$ (Lowest)** | `gh issue` / `gh pr` management, updating `docs/SAAS_ROADMAP.md`, CI workflows. |
+| **Tier 2 (Fast Coder / QA)** | `gemini-4-hydrogen-medium` / `gemini-4-hydrogen-high` | **$$ (Fast)** | Implementing scoped features & TypeScript UI modules, running `npm test` / `tsc` / `npm run check`. |
+| **Tier 3 (Deep Engineering)** | `gemini-4-argon-high` | **$$$ (Lead)** | Deep multi-module engineering (`backend-rs/` Rust Axum + SQLx, relational database architecture), system design, and orchestration. |
+
+---
+
+## 2. Completed Baseline & Phase 1 (GitHub Issues #1–#6)
+
+| Issue | Phase | Title | Model Tier | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1** | `flash_lite` | `adlc-pm`, `adlc-qa` | **$ (Lowest)** | `gh issue` / `gh pr` management, updating `docs/SAAS_ROADMAP.md`, running `npm test` / `tsc` / `npm run check`. |
-| **Tier 2** | `flash` | `adlc-coder` | **$$ (Fast)** | Implementing scoped features & UI improvements on `feat/issue-<N>-*` branches, writing unit & Playwright tests. |
-| **Tier 3** | `pro` / `inherit` | Coordinator | **$$$ (Lead)** | System architecture, multi-tenant data modeling, UX direction, and final PR review before merge. |
+| **#1** | Phase 1 (UX & Studio) | Interactive Slide Inspector & Per-Slide Visual Editor | `gemini-4-hydrogen-high` | ✅ Done (`77c8eb3`) |
+| **#2** | Phase 1 (UX & Studio) | 3-Step Brand Onboarding Wizard & URL Extractor | `gemini-4-hydrogen-high` | ✅ Done (`77c8eb3`) |
+| **#3** | Phase 2 (SaaS Core) | Multi-Tenant SQLite / PostgreSQL Database Adapter (`src/services/db-adapter.js`) | `gemini-4-argon-high` | ✅ Done (`77c8eb3`) |
+| **#4** | Phase 2 (SaaS Core) | Quota Paywall & Upgrade Modal UX (`2/4/16` & `4/20/100`) + CSV Cost Export | `gemini-4-hydrogen-high` | ✅ Done (`77c8eb3`) |
+| **#5** | Phase 3 (AI & Vision) | Brand Guidelines PDF & Website URL Crawler (`src/services/guidelines-crawler.js`) | `gemini-4-hydrogen-high` | ✅ Done (`77c8eb3`) |
+| **#6** | Phase 4 (CI/CD & Ops) | GitHub Actions CI Pipeline (`.github/workflows/adlc-ci.yml`) | `gemini-4-hydrogen-low` | ✅ Done (`77c8eb3`) |
 
 ---
 
-## 2. Completed Baseline (Milestone 0 — Core MVP)
-
-| Component | Status | Key Files |
-| :--- | :--- | :--- |
-| **Office `.pptx` / `.potx` / `.thmx` Brand Extractor (`DanishCVI`)** | ✅ Done | `src/services/brand-extractor.js` |
-| **Dependency-Free `1600×900` Deck Engine & Presenting Tools** | ✅ Done | `src/engine/deck-engine.css`, `src/engine/deck-engine.js` |
-| **Headless Chromium 8-Point Brand & WCAG Checker (+ Negative Fixture)** | ✅ Done | `src/services/checker.js`, `src/services/broken-fixture.js` |
-| **Story-First AI Agent Loop + Self-Healing Check-and-Fix** | ✅ Done | `src/services/agent.js`, `src/services/llm-gateway.js` |
-| **Configurable SaaS Quotas (`2/4/16` Brands · `4/20/100` Daily Decks) & Cost Lab** | ✅ Done | `src/services/storage.js` |
-| **Offline `.zip` & Landscape `.pdf` Exporter + MCP Server** | ✅ Done | `src/services/exporter.js`, `src/mcp/server.js` |
-| **Warm Nordic Creative Studio UI Redesign** | ✅ Done | `src/public/index.html`, `src/public/styles.css`, `src/public/app.js` |
-
----
-
-## 3. Active SaaS Backlog (Tracked via GitHub Issues)
+## 3. Phase 2 Architecture & CVI Onboarding Backlog (GitHub Issues #7–#10)
 
 | Issue | Phase | Title | Assigned Model Tier | Area | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **#1** | Phase 1 (UX & Studio) | Interactive Slide Inspector & Per-Slide Visual Editor (change slide layout type, edit headline/notes inline without full rebuild) | `model:flash` | `area:ui` | ✅ Done |
-| **#2** | Phase 1 (UX & Studio) | Step-by-Step Brand Onboarding Wizard for new brands (e.g. `DanishCVI` 3-step guided setup: Upload → Swatches & Fonts → Live Preview) | `model:flash` | `area:ui`, `area:brand-kit` | ✅ Done |
-| **#3** | Phase 2 (SaaS Core) | Database Adapter (SQLite / PostgreSQL via Drizzle) replacing local JSON state while preserving 1-command local mode | `model:flash` | `area:saas` | ✅ Done |
-| **#4** | Phase 2 (SaaS Core) | Quota Paywall & Upgrade Modal UX when hitting `2/4/16` Brand limit or `4/20/100` Daily Deck limit + CSV Cost Export | `model:flash-lite` | `area:saas`, `area:ui` | ✅ Done |
-| **#5** | Phase 3 (AI & Vision) | Brand Guidelines PDF & Website URL Crawler (extract colour palette, typography, and brand tone from URLs/PDFs) | `model:flash` | `area:brand-kit`, `area:agent` | ✅ Done |
-| **#6** | Phase 4 (CI/CD & Ops) | GitHub Actions CI Pipeline running `adlc-cli.sh verify` (`tsc` + `npm test` + Playwright checker) on every Pull Request | `model:flash-lite` | `area:saas` | ✅ Done |
+| **#7** | Phase 2 (Rust Backend) | Rust Control Plane (`backend-rs/` with Axum + SQLite + Quick-XML `.pptx` CVI Extractor + Quota & MCP API) | `gemini-4-argon-high` | `area:saas`, `area:brand-kit` | ✅ Done |
+| **#8** | Phase 2 (Relational DB) | Direct Relational SQLite Persistence in `StorageService` (eliminating `state.json` dependence via `DatabaseAdapter`) | `gemini-4-hydrogen-high` | `area:saas` | ✅ Done |
+| **#9** | Phase 2 (Zero-Brand CVI) | Zero-Brand CVI Onboarding Flow (remove hardcoded `DanishCVI` defaults so users create their own CVI from scratch) | `gemini-4-hydrogen-high` | `area:ui`, `area:brand-kit` | ✅ Done |
+| **#10** | Phase 2 (TypeScript UI) | Strict TypeScript Frontend Controller (`src/public/app.ts`) + End-to-End Verification | `gemini-4-hydrogen-medium` | `area:ui` | ✅ Done |
 
 ---
 

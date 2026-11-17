@@ -30,7 +30,7 @@ const STARTER_BRIEFS = {
   },
   howitworks: {
     topic:
-      'How the Zero-Trust Brand Deck Engine works: 1) Extract design tokens and inch geometry from an Office .pptx template into a versioned Brand Kit like DanishCVI. 2) Map factual brief statements and unaltered media evidence onto 15 brand-tokenised components. 3) Verify 100% of slides in headless Chromium for WCAG AA contrast and zero stage overflow.',
+      'How the Zero-Trust Brand Deck Engine works: 1) Extract design tokens and inch geometry from an Office .pptx template into a versioned Brand Kit. 2) Map factual brief statements and unaltered media evidence onto 15 brand-tokenised components. 3) Verify 100% of slides in headless Chromium for WCAG AA contrast and zero stage overflow.',
     audience: 'product',
     lengthMinutes: 10,
     endsWithLiveDemo: true,
@@ -152,6 +152,7 @@ class DeckStudioApp {
   }
 
   async selectBrandKit(brandKitId) {
+    if (!brandKitId) return;
     const res = await fetch('/api/brands/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -182,19 +183,31 @@ class DeckStudioApp {
     const studioSel = document.getElementById('studio-brand-select');
     const studioBadge = document.getElementById('studio-brand-badge');
     const headerDots = document.getElementById('header-brand-dots');
+    const onboardingBanner = document.getElementById('zero-brand-onboarding-banner');
 
-    const optionsHtml = this.brandKits
-      .map(
-        (k) =>
-          `<option value="${k.id}" ${k.id === this.activeBrandKit?.id ? 'selected' : ''}>${k.name} (v${k.currentVersion})</option>`
-      )
-      .join('');
+    if (onboardingBanner) {
+      onboardingBanner.style.display = this.brandKits.length === 0 ? 'flex' : 'none';
+    }
+
+    const optionsHtml =
+      this.brandKits.length > 0
+        ? this.brandKits
+            .map(
+              (k) =>
+                `<option value="${k.id}" ${k.id === this.activeBrandKit?.id ? 'selected' : ''}>${k.name} (v${k.currentVersion})</option>`
+            )
+            .join('')
+        : '<option value="">No Brand CVI yet</option>';
 
     if (headerSel) headerSel.innerHTML = optionsHtml;
     if (studioSel) studioSel.innerHTML = optionsHtml;
-    if (studioBadge && this.activeBrandKit) {
-      const shortName = this.activeBrandKit.name.split('—')[0].trim();
-      studioBadge.textContent = `${shortName} v${this.activeBrandKit.version}`;
+    if (studioBadge) {
+      if (this.activeBrandKit) {
+        const shortName = this.activeBrandKit.name.split('—')[0].trim();
+        studioBadge.textContent = `${shortName} v${this.activeBrandKit.version}`;
+      } else {
+        studioBadge.textContent = 'Select Brand CVI';
+      }
     }
     if (headerDots && this.activeBrandKit?.colors) {
       const c = this.activeBrandKit.colors;
@@ -210,6 +223,9 @@ class DeckStudioApp {
   // STUDIO: Create & Edit
   // --------------------------------------------------------------------------
   bindStudioEvents() {
+    document.getElementById('goto-brand-onboarding-btn')?.addEventListener('click', () => {
+      this.switchView('brand');
+    });
     const topicEl = document.getElementById('brief-topic');
     const slugEl = document.getElementById('brief-slug');
     const audEl = document.getElementById('brief-audience');
@@ -799,7 +815,7 @@ class DeckStudioApp {
           guidelinesInput.value = parts.join(' | ');
         }
         const nameInput = document.getElementById('new-brand-name');
-        if (nameInput && data.companyName && (!nameInput.value.trim() || nameInput.value.trim() === 'DanishCVI Event')) {
+        if (nameInput && data.companyName && !nameInput.value.trim()) {
           nameInput.value = data.companyName;
         }
 
@@ -969,7 +985,13 @@ class DeckStudioApp {
     }
 
     const kit = this.activeBrandKit;
-    if (!kit) return;
+    if (!kit) {
+      const titleEl = document.getElementById('active-brand-editor-title');
+      const verEl = document.getElementById('active-brand-version-badge');
+      if (titleEl) titleEl.textContent = 'Active Brand CVI';
+      if (verEl) verEl.textContent = 'v0';
+      return;
+    }
 
     document.getElementById('active-brand-editor-title').textContent = kit.name;
     document.getElementById('active-brand-version-badge').textContent = `Version ${kit.version}`;

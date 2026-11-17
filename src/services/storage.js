@@ -12,6 +12,7 @@ import {
   extractBrandKitFromOfficeBuffer,
   generateRealOfficeTemplateZip
 } from './brand-extractor.js';
+import { DatabaseAdapter } from './db-adapter.js';
 
 const ROOT_DIR = process.cwd();
 export const DATA_DIR = path.join(ROOT_DIR, 'data');
@@ -74,6 +75,10 @@ export class StorageService {
   constructor(baseDataDir = DATA_DIR) {
     this.baseDataDir = baseDataDir;
     ensureDir(this.baseDataDir);
+    this.db = new DatabaseAdapter({
+      dbPath: path.join(this.baseDataDir, 'deck_studio.sqlite')
+    });
+    this.db.initSchema();
   }
 
   getOrgDir(orgId = 'default-org') {
@@ -100,7 +105,7 @@ export class StorageService {
     const defaultState = {
       org: {
         id: orgId,
-        name: 'DanishCVI Studio Workspace',
+        name: 'My Studio Workspace',
         role: 'brand_admin', // 'brand_admin' | 'editor' | 'viewer'
         subscription: {
           tier: 'pro', // 'starter' | 'pro' | 'enterprise'
@@ -121,7 +126,7 @@ export class StorageService {
         sso: {
           enabled: true,
           provider: 'OIDC (Okta Enterprise)',
-          issuerUrl: 'https://sso.danishcvi.internal/oauth2/default',
+          issuerUrl: 'https://sso.workspace.internal/oauth2/default',
           dataResidency: 'eu-north-1 (Copenhagen)'
         },
         llmConfig: {
@@ -168,6 +173,9 @@ export class StorageService {
   saveOrgState(orgId, state) {
     const stateFile = this.getStateFilePath(orgId);
     writeJsonAtomic(stateFile, state);
+    if (this.db) {
+      this.db.syncFromOrgState(orgId, state);
+    }
     return state;
   }
 
@@ -675,6 +683,27 @@ export class StorageService {
       detail: `Deleted Brand Kit "${kitId}"`
     });
     return true;
+  }
+
+  /**
+   * Resets a workspace to 0 Brand Kits (`usedBrands: 0`) for testing Zero-Brand CVI Onboarding.
+   */
+  clearAllBrandKits(orgId = 'default-org') {
+    const state = this.loadOrgState(orgId);
+    state.brandKits = {};
+    state.activeBrandKitId = null;
+    if (this.db?.sqliteDb) {
+      this.db.sqliteDb
+        .prepare('DELETE FROM brand_kits WHERE org_id = ?')
+        .run(String(orgId));
+    }
+    this.saveOrgState(orgId, state);
+    this.appendAudit(orgId, {
+      action: 'brand_kits.cleared',
+      target: orgId,
+      detail: 'Cleared all Brand Kits from workspace (reset to 0 Brand Kits)'
+    });
+    return this.getQuotaStatus(orgId);
   }
 
   getDeckDir(orgId, deckSlug) {

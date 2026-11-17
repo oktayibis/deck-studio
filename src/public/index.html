@@ -43,6 +43,20 @@
        1. CREATE & EDIT (STUDIO)
        ======================================================================== -->
   <main id="view-studio" class="view-panel active">
+    <section
+      id="zero-brand-onboarding-banner"
+      class="surface-card"
+      style="display:none;flex-direction:row;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;background-color:var(--accent-soft);border-color:rgba(200, 75, 49, 0.28);"
+      aria-label="Brand CVI Onboarding"
+    >
+      <p style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0;">
+        <strong>Welcome! Start by creating your own Brand CVI (colours, fonts, logo or .pptx template) so every presentation matches your visual identity.</strong>
+      </p>
+      <button type="button" class="btn btn-primary" id="goto-brand-onboarding-btn" style="white-space:nowrap;">
+        Create Your Brand CVI →
+      </button>
+    </section>
+
     <div class="studio-workspace">
       <!-- Left: Simple, Focused Prompt & Media Card -->
       <aside class="studio-sidebar">
@@ -52,7 +66,7 @@
               <h1 class="card-title">New Presentation</h1>
               <p class="card-subtitle">Describe your talk and attach screenshots or video.</p>
             </div>
-            <span class="badge badge-pass" id="studio-brand-badge">DanishCVI v1</span>
+            <span class="badge badge-pass" id="studio-brand-badge">Select Brand CVI</span>
           </div>
 
           <!-- Hidden select synced with header brand selector for compatibility -->
@@ -288,7 +302,7 @@
         <section class="surface-card">
           <div class="card-heading">
             <div>
-              <h2 class="card-title" id="active-brand-editor-title">DanishCVI</h2>
+              <h2 class="card-title" id="active-brand-editor-title">Active Brand CVI</h2>
               <p class="card-subtitle">Click any colour swatch or typography setting to customize.</p>
             </div>
             <span class="badge badge-pass" id="active-brand-version-badge">v1</span>
@@ -356,7 +370,7 @@
           </div>
           <div class="field-group">
             <label class="field-label" for="new-brand-name">Brand Name</label>
-            <input type="text" id="new-brand-name" class="ui-input" placeholder="e.g. DanishCVI, Acme Studio..." value="DanishCVI Event" />
+            <input type="text" id="new-brand-name" class="ui-input" placeholder="Enter your brand or company name (e.g. Acme Studio)..." value="" />
           </div>
           <div class="field-group">
             <label class="field-label" for="new-brand-file">Upload PowerPoint Theme (.pptx, .potx, .thmx)</label>
