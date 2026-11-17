@@ -19,6 +19,9 @@ import { runAgentCreateDeck, runAgentEditDeck } from '../src/services/agent.js';
 import { handleMcpJsonRpc } from '../src/mcp/server.js';
 import { ensureSampleMediaAssets } from '../src/utils/sample-media.js';
 import { getSharedBrowser, closeSharedBrowser } from '../src/utils/browser.js';
+import { extractBrandSignalsFromHtmlOrText } from '../src/services/guidelines-crawler.js';
+import { DatabaseAdapter } from '../src/services/db-adapter.js';
+import { createApp } from '../src/server/index.js';
 
 const TEST_ORG = 'test-suite-org';
 
@@ -326,4 +329,101 @@ test('7. MCP Server & Offline ZIP / PDF Exports (§3.5, §9, §12)', async () =>
   const pdfInfo = pdfRpc.result.structuredContent;
   const pdfBuf = fs.readFileSync(pdfInfo.filePath);
   assert.equal(pdfBuf.subarray(0, 5).toString('ascii'), '%PDF-');
+});
+
+test('8. ADLC Features: Brand Guidelines Crawler (#5), SQLite DatabaseAdapter (#3), Per-Slide PUT & CSV Cost Export (#1, #4)', async () => {
+  // 1. Brand Guidelines Crawler (#5)
+  const sampleHtml = `
+    <html>
+      <head>
+        <title>Nordic Compute — Brand Guidelines</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+          :root { --brand-primary: #0F172A; --brand-accent: #E11D48; --brand-light: #F8FAFC; }
+          body { font-family: "Inter", sans-serif; background: #F8FAFC; color: #0F172A; }
+        </style>
+      </head>
+      <body><h1>Nordic Compute</h1></body>
+    </html>
+  `;
+  const signals = extractBrandSignalsFromHtmlOrText(sampleHtml, 'https://nordiccompute.example');
+  assert.ok(signals.companyName.includes('Nordic Compute'));
+  assert.ok(signals.extractedHexes.includes('#0F172A'));
+  assert.ok(signals.extractedHexes.includes('#E11D48'));
+  assert.ok(signals.extractedHexes.includes('#F8FAFC'));
+  assert.ok(signals.suggestedColors.primary);
+  assert.ok(signals.suggestedColors.accent);
+  assert.ok(signals.detectedFonts.some((f) => f.toLowerCase().includes('inter')));
+
+  // 2. DatabaseAdapter (#3) with in-memory SQLite
+  const db = new DatabaseAdapter({ sqlitePath: ':memory:' });
+  await db.initSchema();
+  await db.upsertOrganisation({
+    id: TEST_ORG,
+    name: 'Test Suite Org',
+    tier: 'pro',
+    maxBrands: 4,
+    dailyDeckLimit: 20,
+    settings: { region: 'eu-central-1' }
+  });
+  const orgRow = await db.getOrganisation(TEST_ORG);
+  assert.equal(orgRow.id, TEST_ORG);
+  assert.equal(orgRow.tier, 'pro');
+
+  const orgState = storage.loadOrgState(TEST_ORG);
+  const syncSummary = await db.syncFromOrgState(TEST_ORG, orgState);
+  assert.equal(syncSummary.synced, true);
+  assert.ok(syncSummary.counts.brandKitVersions >= 1);
+  assert.ok(syncSummary.counts.decks >= 1);
+  const listedBrands = await db.listBrandKits(TEST_ORG);
+  assert.ok(listedBrands.length >= 1);
+  const syncedDeck = await db.getDeck(TEST_ORG, 'march-incident-danishcvi');
+  assert.ok(syncedDeck && syncedDeck.slug === 'march-incident-danishcvi');
+  db.close();
+
+  // 3. HTTP Endpoints via createApp(): PUT /api/decks/:slug/slides/0 (#1) & GET /api/subscription/cost-export.csv (#4)
+  const app = createApp();
+  const server = await new Promise((resolve) => {
+    const srv = app.listen(0, '127.0.0.1', () => resolve(srv));
+  });
+
+  try {
+    const { port } = server.address();
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    // PUT /api/decks/:slug/slides/0
+    const updatedTitle = 'EU-Central-1 Mitigation Summary';
+    const putRes = await fetch(
+      `${baseUrl}/api/decks/march-incident-danishcvi/slides/0`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgId: TEST_ORG,
+          title: updatedTitle,
+          speakerNotes: 'Updated speaker notes from slide inspector test.'
+        })
+      }
+    );
+    assert.equal(putRes.status, 200);
+    const putJson = await putRes.json();
+    assert.equal(putJson.deck.slides[0].title, updatedTitle);
+    assert.equal(putJson.deck.storyline.headlines[0], updatedTitle);
+    assert.equal(putJson.checkReport.passed, true);
+
+    // GET /api/subscription/cost-export.csv
+    const csvRes = await fetch(
+      `${baseUrl}/api/subscription/cost-export.csv?orgId=${encodeURIComponent(TEST_ORG)}`
+    );
+    assert.equal(csvRes.status, 200);
+    assert.ok(csvRes.headers.get('content-type').includes('text/csv'));
+    const csvText = await csvRes.text();
+    assert.ok(
+      csvText.startsWith(
+        'timestamp,deckSlug,operation,promptTokens,completionTokens,llmCostUsd,workerCostUsd,totalCostUsd,renderDurationMs'
+      )
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

@@ -108,6 +108,38 @@ export function createApp() {
     }
   });
 
+  app.get('/api/subscription/cost-export.csv', (req, res, next) => {
+    try {
+      const orgId = req.query.orgId || 'default-org';
+      const state = storage.loadOrgState(orgId);
+      const history = state.org?.usageStats?.costHistory || [];
+      const columns = [
+        'timestamp',
+        'deckSlug',
+        'operation',
+        'promptTokens',
+        'completionTokens',
+        'llmCostUsd',
+        'workerCostUsd',
+        'totalCostUsd',
+        'renderDurationMs'
+      ];
+      const escapeCsv = (val) => {
+        const str = val === null || val === undefined ? '' : String(val);
+        return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+      };
+      const rows = history.map((entry) =>
+        columns.map((col) => escapeCsv(entry?.[col])).join(',')
+      );
+      const csv = [columns.join(','), ...rows].join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="deck-studio-cost-telemetry.csv"');
+      res.send(csv);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.post('/api/org/settings', async (req, res, next) => {
     try {
       const orgId = req.body.orgId || 'default-org';
@@ -162,6 +194,19 @@ export function createApp() {
       const orgId = req.body.orgId || 'default-org';
       const active = storage.setActiveBrandKit(orgId, req.body.brandKitId);
       res.json({ activeBrandKit: active, brandKits: storage.listBrandKits(orgId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post('/api/brands/crawl', async (req, res, next) => {
+    try {
+      const { crawlBrandUrlOrText } = await import('../services/guidelines-crawler.js');
+      const signals = await crawlBrandUrlOrText({
+        url: req.body?.url || '',
+        text: req.body?.text || ''
+      });
+      res.json(signals);
     } catch (err) {
       next(err);
     }
@@ -633,6 +678,54 @@ export function createApp() {
       const orgId = req.query.orgId || 'default-org';
       storage.deleteDeck(orgId, req.params.slug);
       res.json({ decks: storage.listDecks(orgId), quota: storage.getQuotaStatus(orgId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Per-Slide Visual Editor (Issue #1)
+  app.put('/api/decks/:slug/slides/:slideIndex', async (req, res, next) => {
+    try {
+      const orgId = req.body?.orgId || req.query?.orgId || 'default-org';
+      const deck = storage.getDeck(orgId, req.params.slug);
+      if (!deck) {
+        return res.status(404).json({ error: 'Deck not found.' });
+      }
+
+      const idx = parseInt(req.params.slideIndex, 10);
+      if (
+        !/^\d+$/.test(String(req.params.slideIndex).trim()) ||
+        !Array.isArray(deck.slides) ||
+        idx < 0 ||
+        idx >= deck.slides.length
+      ) {
+        return res.status(400).json({ error: 'Invalid slide index.' });
+      }
+
+      const slide = deck.slides[idx];
+      for (const field of ['type', 'eyebrow', 'title', 'lede', 'speakerNotes']) {
+        if (req.body?.[field] !== undefined) {
+          slide[field] = req.body[field];
+        }
+      }
+
+      deck.storyline = deck.storyline || {};
+      deck.storyline.headlines = deck.slides.map((s) => s.title);
+
+      const brandKit = storage.getActiveBrandKit(orgId, deck.brandKitId, deck.brandKitVersion);
+      const html = compileDeckToHtml(deck, brandKit, { inlineRuntime: true });
+      const deckDir = storage.getDeckDir(orgId, deck.slug);
+      fs.writeFileSync(path.join(deckDir, 'index.html'), html, 'utf8');
+
+      const checkReport = await runHeadlessDeckCheck({ html, brandKit });
+      deck.lastCheckReport = checkReport;
+
+      const savedDeck = storage.saveDeck(orgId, deck, {
+        createHistorySnapshot: true,
+        historyNote: 'Edited Slide ' + (idx + 1)
+      });
+
+      res.json({ deck: savedDeck, checkReport });
     } catch (err) {
       next(err);
     }

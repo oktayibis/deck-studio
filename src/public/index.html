@@ -174,6 +174,49 @@
         <!-- Clickable Slide Filmstrip -->
         <div class="slide-filmstrip" id="studio-slide-filmstrip" aria-label="Slide navigation strip"></div>
 
+        <!-- Inline Slide Inspector -->
+        <details class="inspector-drawer" id="slide-inspector-drawer" open>
+          <summary>
+            <span style="display:flex;align-items:center;gap:10px;">
+              <span>Slide Inspector — Edit Selected Slide Directly</span>
+              <span id="inspector-slide-badge" class="badge badge-pass">Slide 01</span>
+            </span>
+            <span style="font-size:12px;color:var(--text-muted);">Edit slide fields directly ▾</span>
+          </summary>
+          <div class="slide-inspector-form">
+            <div class="slide-inspector-grid">
+              <div class="field-group">
+                <label class="field-label" for="inspector-slide-type">Slide Type</label>
+                <select id="inspector-slide-type" class="ui-select">
+                  <option value="cover">cover</option>
+                  <option value="content">content</option>
+                  <option value="content-alt">content-alt</option>
+                  <option value="content-dark">content-dark</option>
+                  <option value="statement">statement</option>
+                  <option value="section-dark">section-dark</option>
+                  <option value="section-light">section-light</option>
+                  <option value="end">end</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="inspector-slide-title">Title</label>
+                <input type="text" id="inspector-slide-title" class="ui-input" placeholder="Slide headline..." />
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="inspector-slide-lede">Lede / Subtitle</label>
+              <input type="text" id="inspector-slide-lede" class="ui-input" placeholder="Supporting summary line..." />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="inspector-slide-notes">Speaker Notes</label>
+              <input type="text" id="inspector-slide-notes" class="ui-input" placeholder="Presenter notes for this slide..." />
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <button type="button" class="btn btn-sm btn-primary" id="save-slide-inspector-btn">Save Slide</button>
+            </div>
+          </div>
+        </details>
+
         <!-- Simple Conversational AI Refinement Bar -->
         <div class="ai-refine-bar">
           <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -306,6 +349,11 @@
             <h2 class="card-title">Add Another Brand Kit</h2>
             <p class="card-subtitle">Import from a PowerPoint file (<code>.pptx</code>, <code>.potx</code>, <code>.thmx</code>) or guidelines.</p>
           </div>
+          <div class="wizard-steps-bar" id="brand-wizard-steps" aria-label="Brand onboarding steps">
+            <span class="wizard-step-pill active" data-wizard-step="1">Step 1: Source (.pptx or URL)</span>
+            <span class="wizard-step-pill" data-wizard-step="2">Step 2: Extract Signals</span>
+            <span class="wizard-step-pill" data-wizard-step="3">Step 3: Create Brand</span>
+          </div>
           <div class="field-group">
             <label class="field-label" for="new-brand-name">Brand Name</label>
             <input type="text" id="new-brand-name" class="ui-input" placeholder="e.g. DanishCVI, Acme Studio..." value="DanishCVI Event" />
@@ -313,6 +361,13 @@
           <div class="field-group">
             <label class="field-label" for="new-brand-file">Upload PowerPoint Theme (.pptx, .potx, .thmx)</label>
             <input type="file" id="new-brand-file" class="ui-input" accept=".pptx,.potx,.thmx" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="new-brand-url">Website or Brand Guidelines URL</label>
+            <div style="display:flex;gap:8px;">
+              <input type="url" id="new-brand-url" class="ui-input" placeholder="https://example.com/brand-guidelines" />
+              <button type="button" class="btn btn-sm" id="crawl-brand-url-btn" style="white-space:nowrap;">Auto-Extract from URL/Text</button>
+            </div>
           </div>
           <div class="field-group">
             <label class="field-label" for="new-brand-sample">Or pick a ready-made template</label>
@@ -486,9 +541,12 @@
       <!-- Right: Cost per Presentation & AI Provider Settings -->
       <div style="display:flex;flex-direction:column;gap:20px;">
         <section class="surface-card">
-          <div>
-            <h2 class="card-title">Unit Economics &amp; Cost per Deck</h2>
-            <p class="card-subtitle">Real-time token and Chromium render cost tracking for pricing decisions.</p>
+          <div class="card-heading">
+            <div>
+              <h2 class="card-title">Unit Economics &amp; Cost per Deck</h2>
+              <p class="card-subtitle">Real-time token and Chromium render cost tracking for pricing decisions.</p>
+            </div>
+            <a class="btn btn-sm" href="/api/subscription/cost-export.csv" download>⬇ Export Cost CSV</a>
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;" id="cost-summary-cards"></div>
           <table class="ui-table">
@@ -551,6 +609,30 @@
       </div>
     </div>
   </main>
+
+  <!-- Quota Upgrade Modal -->
+  <div class="modal-backdrop" id="quota-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="quota-upgrade-title" hidden>
+    <div class="modal-card">
+      <div class="card-heading">
+        <div>
+          <h2 class="card-title" id="quota-upgrade-title">Workspace Quota Reached</h2>
+          <p class="card-subtitle" id="quota-upgrade-message">Upgrade your plan to unlock more Brand Kits and higher daily presentation limits.</p>
+        </div>
+        <button type="button" class="btn btn-sm btn-ghost" id="close-quota-modal-btn" aria-label="Close upgrade modal">✕</button>
+      </div>
+      <div class="quota-upgrade-options">
+        <button type="button" class="btn btn-primary" data-upgrade-tier="pro" id="upgrade-pro-btn">
+          Pro (4 Brands · 20 Decks/day)
+        </button>
+        <button type="button" class="btn btn-dark" data-upgrade-tier="enterprise" id="upgrade-enterprise-btn">
+          Enterprise (16 Brands · 100 Decks/day)
+        </button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button type="button" class="btn btn-sm btn-ghost" id="dismiss-quota-modal-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <div class="toast-banner" id="toast-banner" role="status" aria-live="polite"></div>
 

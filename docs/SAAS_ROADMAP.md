@@ -34,12 +34,12 @@ To move fast while keeping AI/LLM token costs low, all development work is split
 
 | Issue | Phase | Title | Assigned Model Tier | Area | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **#1** | Phase 1 (UX & Studio) | Interactive Slide Inspector & Per-Slide Visual Editor (change slide layout type, edit headline/notes inline without full rebuild) | `model:flash` | `area:ui` | 📋 Open |
-| **#2** | Phase 1 (UX & Studio) | Step-by-Step Brand Onboarding Wizard for new brands (e.g. `DanishCVI` 3-step guided setup: Upload → Swatches & Fonts → Live Preview) | `model:flash` | `area:ui`, `area:brand-kit` | 📋 Open |
-| **#3** | Phase 2 (SaaS Core) | Database Adapter (SQLite / PostgreSQL via Drizzle) replacing local JSON state while preserving 1-command local mode | `model:flash` | `area:saas` | 📋 Open |
-| **#4** | Phase 2 (SaaS Core) | Quota Paywall & Upgrade Modal UX when hitting `2/4/16` Brand limit or `4/20/100` Daily Deck limit + CSV Cost Export | `model:flash-lite` | `area:saas`, `area:ui` | 📋 Open |
-| **#5** | Phase 3 (AI & Vision) | Brand Guidelines PDF & Website URL Crawler (extract colour palette, typography, and brand tone from URLs/PDFs) | `model:flash` | `area:brand-kit`, `area:agent` | 📋 Open |
-| **#6** | Phase 4 (CI/CD & Ops) | GitHub Actions CI Pipeline running `adlc-cli.sh verify` (`tsc` + `npm test` + Playwright checker) on every Pull Request | `model:flash-lite` | `area:saas` | 📋 Open |
+| **#1** | Phase 1 (UX & Studio) | Interactive Slide Inspector & Per-Slide Visual Editor (change slide layout type, edit headline/notes inline without full rebuild) | `model:flash` | `area:ui` | ✅ Done |
+| **#2** | Phase 1 (UX & Studio) | Step-by-Step Brand Onboarding Wizard for new brands (e.g. `DanishCVI` 3-step guided setup: Upload → Swatches & Fonts → Live Preview) | `model:flash` | `area:ui`, `area:brand-kit` | ✅ Done |
+| **#3** | Phase 2 (SaaS Core) | Database Adapter (SQLite / PostgreSQL via Drizzle) replacing local JSON state while preserving 1-command local mode | `model:flash` | `area:saas` | ✅ Done |
+| **#4** | Phase 2 (SaaS Core) | Quota Paywall & Upgrade Modal UX when hitting `2/4/16` Brand limit or `4/20/100` Daily Deck limit + CSV Cost Export | `model:flash-lite` | `area:saas`, `area:ui` | ✅ Done |
+| **#5** | Phase 3 (AI & Vision) | Brand Guidelines PDF & Website URL Crawler (extract colour palette, typography, and brand tone from URLs/PDFs) | `model:flash` | `area:brand-kit`, `area:agent` | ✅ Done |
+| **#6** | Phase 4 (CI/CD & Ops) | GitHub Actions CI Pipeline running `adlc-cli.sh verify` (`tsc` + `npm test` + Playwright checker) on every Pull Request | `model:flash-lite` | `area:saas` | ✅ Done |
 
 ---
 

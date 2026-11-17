@@ -63,6 +63,7 @@ class DeckStudioApp {
     this.bindBrandSetupEvents();
     this.bindLibraryEvents();
     this.bindSaasQuotaEvents();
+    this.bindQuotaModalEvents();
     this.restoreDraftFromStorage();
     await this.refreshBootstrap();
   }
@@ -322,6 +323,7 @@ class DeckStudioApp {
 
     document.getElementById('apply-refine-btn')?.addEventListener('click', () => this.handleRefineSelectedDeck());
     document.getElementById('undo-deck-btn')?.addEventListener('click', () => this.handleUndoDeck());
+    document.getElementById('save-slide-inspector-btn')?.addEventListener('click', () => this.handleSaveSlideInspector());
 
     // Viewer Controls
     document.getElementById('viewer-prev-btn')?.addEventListener('click', () => {
@@ -331,6 +333,7 @@ class DeckStudioApp {
         engine.prevStep();
         this.activeSlideIndex = engine.currentIndex;
         this.highlightActiveFilmstripPill();
+        this.populateSlideInspector();
       }
     });
     document.getElementById('viewer-next-btn')?.addEventListener('click', () => {
@@ -340,6 +343,7 @@ class DeckStudioApp {
         engine.nextStep();
         this.activeSlideIndex = engine.currentIndex;
         this.highlightActiveFilmstripPill();
+        this.populateSlideInspector();
       }
     });
     document.getElementById('viewer-present-btn')?.addEventListener('click', () => {
@@ -453,6 +457,9 @@ class DeckStudioApp {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 429 || data.code === 'DAILY_DECK_LIMIT_EXCEEDED') {
+          this.openQuotaUpgradeModal(data.error || 'Daily presentation limit reached.');
+        }
         this.showToast(data.error || 'Could not create presentation');
         return;
       }
@@ -560,7 +567,12 @@ class DeckStudioApp {
 
     if (!deck) {
       if (titleEl) titleEl.textContent = 'No Presentation Selected';
+      this.populateSlideInspector();
       return;
+    }
+
+    if ((deck.slides || []).length > 0 && this.activeSlideIndex >= deck.slides.length) {
+      this.activeSlideIndex = 0;
     }
 
     if (titleEl) {
@@ -597,6 +609,7 @@ class DeckStudioApp {
           const idx = Number(btn.getAttribute('data-slide-jump'));
           this.activeSlideIndex = idx;
           this.highlightActiveFilmstripPill();
+          this.populateSlideInspector();
           const win = iframe?.contentWindow;
           if (win && win.__deckEngine) {
             win.__deckEngine.goToSlide(idx, { revealAllSteps: true });
@@ -607,8 +620,79 @@ class DeckStudioApp {
       });
     }
 
+    this.populateSlideInspector();
+
     if (deck.lastCheckReport) {
       this.renderCheckReport(deck.lastCheckReport);
+    }
+  }
+
+  populateSlideInspector() {
+    const slide = this.selectedDeck?.slides?.[this.activeSlideIndex] || null;
+    const badgeEl = document.getElementById('inspector-slide-badge');
+    const typeEl = document.getElementById('inspector-slide-type');
+    const titleEl = document.getElementById('inspector-slide-title');
+    const ledeEl = document.getElementById('inspector-slide-lede');
+    const notesEl = document.getElementById('inspector-slide-notes');
+    const saveBtn = document.getElementById('save-slide-inspector-btn');
+
+    if (badgeEl) {
+      badgeEl.textContent = slide
+        ? `Slide ${String(this.activeSlideIndex + 1).padStart(2, '0')}`
+        : 'No Slide';
+    }
+    if (typeEl) typeEl.value = slide?.type || 'content';
+    if (titleEl) titleEl.value = slide?.title || '';
+    if (ledeEl) ledeEl.value = slide?.lede || '';
+    if (notesEl) notesEl.value = slide?.speakerNotes || '';
+    if (saveBtn) saveBtn.disabled = !slide;
+  }
+
+  async handleSaveSlideInspector() {
+    if (!this.selectedDeck) {
+      this.showToast('Create or select a presentation first.');
+      return;
+    }
+    const slide = this.selectedDeck.slides?.[this.activeSlideIndex];
+    if (!slide) {
+      this.showToast('No slide selected.');
+      return;
+    }
+
+    const saveBtn = document.getElementById('save-slide-inspector-btn');
+    const type = document.getElementById('inspector-slide-type')?.value || slide.type;
+    const title = document.getElementById('inspector-slide-title')?.value ?? '';
+    const lede = document.getElementById('inspector-slide-lede')?.value ?? '';
+    const speakerNotes = document.getElementById('inspector-slide-notes')?.value ?? '';
+
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    try {
+      const res = await fetch(
+        `/api/decks/${encodeURIComponent(this.selectedDeck.slug)}/slides/${this.activeSlideIndex}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, title, lede, speakerNotes })
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        this.showToast(data.error || 'Could not save slide');
+        return;
+      }
+
+      this.selectedDeck = data.deck;
+      await this.refreshBootstrap();
+      this.showToast(`Saved Slide ${this.activeSlideIndex + 1}`);
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Slide';
+      }
     }
   }
 
@@ -650,7 +734,85 @@ class DeckStudioApp {
   // --------------------------------------------------------------------------
   // BRAND KIT SETUP
   // --------------------------------------------------------------------------
+  setBrandWizardStep(stepNum) {
+    document.querySelectorAll('#brand-wizard-steps [data-wizard-step]').forEach((pill) => {
+      const step = Number(pill.getAttribute('data-wizard-step'));
+      pill.classList.toggle('done', step < stepNum);
+      pill.classList.toggle('active', step === stepNum);
+    });
+  }
+
   bindBrandSetupEvents() {
+    document.getElementById('new-brand-file')?.addEventListener('change', () => {
+      this.setBrandWizardStep(2);
+    });
+    document.getElementById('new-brand-sample')?.addEventListener('change', () => {
+      this.setBrandWizardStep(3);
+    });
+    document.getElementById('new-brand-url')?.addEventListener('input', () => {
+      this.setBrandWizardStep(1);
+    });
+
+    document.getElementById('crawl-brand-url-btn')?.addEventListener('click', async () => {
+      const urlInput = document.getElementById('new-brand-url');
+      const guidelinesInput = document.getElementById('new-brand-guidelines');
+      const crawlBtn = document.getElementById('crawl-brand-url-btn');
+      const url = urlInput?.value?.trim() || '';
+      const text = guidelinesInput?.value?.trim() || '';
+
+      if (!url && !text) {
+        this.showToast('Enter a website URL or brand notes/CSS text to extract.');
+        return;
+      }
+
+      this.setBrandWizardStep(2);
+      if (crawlBtn) {
+        crawlBtn.disabled = true;
+        crawlBtn.textContent = 'Extracting…';
+      }
+
+      try {
+        const res = await fetch('/api/brands/crawl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, text })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.showToast(data.error || 'Could not extract brand signals');
+          return;
+        }
+
+        const sc = data.suggestedColors || {};
+        const hexes = data.extractedHexes || [];
+        const fonts = data.detectedFonts || [];
+        const parts = [];
+        if (sc.primary) parts.push(`Primary ${sc.primary}`);
+        if (sc.accent) parts.push(`Accent ${sc.accent}`);
+        if (sc.surfaceDark) parts.push(`Dark ${sc.surfaceDark}`);
+        if (sc.surfaceLight) parts.push(`Light ${sc.surfaceLight}`);
+        if (hexes.length > 0) parts.push(`Palette: ${hexes.join(', ')}`);
+        if (fonts.length > 0) parts.push(`Fonts: ${fonts.join(', ')}`);
+        if (data.summary) parts.push(data.summary);
+
+        if (guidelinesInput) {
+          guidelinesInput.value = parts.join(' | ');
+        }
+        const nameInput = document.getElementById('new-brand-name');
+        if (nameInput && data.companyName && (!nameInput.value.trim() || nameInput.value.trim() === 'DanishCVI Event')) {
+          nameInput.value = data.companyName;
+        }
+
+        this.setBrandWizardStep(3);
+        this.showToast(`Extracted ${hexes.length} colours and ${fonts.length} fonts`);
+      } finally {
+        if (crawlBtn) {
+          crawlBtn.disabled = false;
+          crawlBtn.textContent = 'Auto-Extract from URL/Text';
+        }
+      }
+    });
+
     document.getElementById('create-brand-btn')?.addEventListener('click', async () => {
       const name = document.getElementById('new-brand-name')?.value?.trim() || 'CustomBrand';
       const fileInput = document.getElementById('new-brand-file');
@@ -672,9 +834,13 @@ class DeckStudioApp {
       const res = await fetch('/api/brands/extract', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 403 || data.code === 'BRAND_QUOTA_EXCEEDED') {
+          this.openQuotaUpgradeModal(data.error || 'Brand Kit quota reached.');
+        }
         this.showToast(data.error || 'Could not create Brand Kit');
         return;
       }
+      this.setBrandWizardStep(1);
       await this.refreshBootstrap();
       this.refreshBrandGalleryIframe();
       this.showToast(`Created Brand Kit "${data.brandKit.name}"`);
@@ -1024,6 +1190,65 @@ class DeckStudioApp {
         this.showToast('Saved workspace AI & privacy settings');
       }
     });
+  }
+
+  bindQuotaModalEvents() {
+    const modal = document.getElementById('quota-upgrade-modal');
+    if (!modal) return;
+
+    document.getElementById('close-quota-modal-btn')?.addEventListener('click', () => {
+      this.closeQuotaUpgradeModal();
+    });
+    document.getElementById('dismiss-quota-modal-btn')?.addEventListener('click', () => {
+      this.closeQuotaUpgradeModal();
+    });
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) this.closeQuotaUpgradeModal();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.hidden) this.closeQuotaUpgradeModal();
+    });
+
+    modal.querySelectorAll('[data-upgrade-tier]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const tier = btn.getAttribute('data-upgrade-tier');
+        btn.disabled = true;
+        try {
+          const res = await fetch('/api/subscription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tier })
+          });
+          if (res.ok) {
+            await this.refreshBootstrap();
+            this.closeQuotaUpgradeModal();
+            this.showToast(`Switched to ${tier.toUpperCase()} plan`);
+          } else {
+            this.showToast('Could not switch subscription tier');
+          }
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  openQuotaUpgradeModal(message) {
+    const modal = document.getElementById('quota-upgrade-modal');
+    const msgEl = document.getElementById('quota-upgrade-message');
+    if (msgEl && message) {
+      msgEl.textContent = message;
+    }
+    if (modal) {
+      modal.hidden = false;
+    }
+  }
+
+  closeQuotaUpgradeModal() {
+    const modal = document.getElementById('quota-upgrade-modal');
+    if (modal) {
+      modal.hidden = true;
+    }
   }
 
   renderSaasSurface() {
