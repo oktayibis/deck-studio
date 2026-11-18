@@ -54,7 +54,20 @@ To move fast while preserving `Gemini 4 Argon (High)` quota, all development wor
 
 ---
 
-## 5. How to Run the ADLC Workflow
+## 5. Phase 4: React 19 + TypeScript Frontend, Rust Worker Bridge & Containerised Deployment (GitHub Issues #16–#19)
+
+| Issue | Phase | Title | Assigned Model Tier | Area | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **#16** | Phase 4 (Frontend) | React 19 + TypeScript + Vite SPA (`frontend/`) with 5 Views, Dual-Theme & Quota Modal | `gemini-4-hydrogen-high` | `area:ui` | ✅ Done |
+| **#17** | Phase 4 (Rust Bridge) | Headless Chromium Subprocess Worker Bridge (`checker_bridge.rs`) & Full API Parity (`backend-rs/`) | `gemini-4-argon-high` | `area:engine`, `area:saas` | ✅ Done |
+| **#18** | Phase 4 (DevOps) | Containerised Cloud & On-Premises Deployment (`Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`) | `gemini-4-hydrogen-low` | `area:ops`, `area:saas` | ✅ Done |
+| **#19** | Phase 4 (QA / ADLC) | Phase 4 Full-Stack Verification (Vite Build + Node + Playwright + Rust Cargo Tests) | `gemini-4-hydrogen-medium` | `area:qa` | ✅ Done |
+
+*(Note: Issue **#11** Tablet & Mobile Responsive Studio Layout remains `📋 Open (Backlog)` for a future sprint.)*
+
+---
+
+## 6. How to Run the ADLC Workflow
 
 ```bash
 # 1. Check current GitHub Issues, PRs, and branch state

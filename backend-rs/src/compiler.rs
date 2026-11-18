@@ -668,3 +668,53 @@ pub fn default_brand_kit_for_org(org_id: &str) -> BrandKit {
         created_at: "2026-01-01T00:00:00Z".to_string(),
     }
 }
+
+/// Deterministically refines an existing `Deck` in place based on a natural-language `prompt`
+/// (e.g. simplifying a slide, adding an execution timeline, or sharpening executive takeaways).
+pub fn refine_deck_with_prompt(deck: &Deck, prompt: &str, brand: &BrandKit) -> Deck {
+    let mut updated = deck.clone();
+    updated.version = updated.version.saturating_add(1);
+    let clean_prompt = prompt.trim();
+    let lower = clean_prompt.to_ascii_lowercase();
+
+    if (lower.contains("timeline") || lower.contains("milestone") || lower.contains("roadmap"))
+        && updated.slides.len() < 9
+    {
+        let insert_pos = if updated.slides.len() > 1 {
+            updated.slides.len() - 1
+        } else {
+            updated.slides.len()
+        };
+        updated.slides.insert(
+            insert_pos,
+            SlideSpec {
+                index: insert_pos,
+                slide_type: "content-alt".to_string(),
+                eyebrow: "TIMELINE & MILESTONES".to_string(),
+                title: "Execution Timeline & Delivery Milestones".to_string(),
+                lede: format!("{} ({} CVI)", clean_prompt, brand.name),
+                speaker_notes: format!("Added timeline slide from prompt: {clean_prompt}"),
+            },
+        );
+    } else if lower.contains("simplify") || lower.contains("concise") || lower.contains("shorten") {
+        let target_idx = if updated.slides.len() > 1 { 1 } else { 0 };
+        if let Some(slide) = updated.slides.get_mut(target_idx) {
+            slide.eyebrow = "SIMPLIFIED EXECUTIVE TAKEAWAY".to_string();
+            slide.lede = format!("Concise focus: {clean_prompt}");
+            slide.speaker_notes = format!("Simplified slide via prompt: {clean_prompt}");
+        }
+    } else {
+        let target_idx = if updated.slides.len() > 1 { 1 } else { 0 };
+        if let Some(slide) = updated.slides.get_mut(target_idx) {
+            slide.lede = format!("{clean_prompt} — aligned with {}.", brand.name);
+            slide.speaker_notes = format!("Refined in-place: {clean_prompt}");
+        }
+    }
+
+    for (idx, slide) in updated.slides.iter_mut().enumerate() {
+        slide.index = idx;
+    }
+
+    updated
+}
+

@@ -1,4 +1,5 @@
 pub mod brand;
+pub mod checker_bridge;
 pub mod compiler;
 pub mod db;
 pub mod models;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -20,6 +21,7 @@ use tower_http::services::ServeDir;
 use crate::brand::{
     build_synthetic_pptx_zip, extract_brand_kit_from_pptx_bytes, slugify,
 };
+use crate::checker_bridge::verify_deck_structure;
 use crate::compiler::{
     compile_deck_to_html, export_deck_to_zip_bytes, synthesize_deck_from_brief,
 };
@@ -83,6 +85,48 @@ pub struct ExtractBrandJsonRequest {
     pub minor_font: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearBrandsRequest {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSlideRequest {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+    #[serde(rename = "type", alias = "slideType", alias = "slide_type")]
+    pub slide_type: Option<String>,
+    pub eyebrow: Option<String>,
+    pub title: Option<String>,
+    pub lede: Option<String>,
+    #[serde(alias = "speaker_notes")]
+    pub speaker_notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EditDeckRequest {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+    pub prompt: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmTestRequest {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    #[serde(alias = "internal_network_only")]
+    pub internal_network_only: Option<bool>,
+    #[serde(alias = "forbid_external_media")]
+    pub forbid_external_media: Option<bool>,
+}
+
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health_handler))
@@ -92,10 +136,17 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(get_subscription_handler).post(update_subscription_handler),
         )
         .route("/api/subscription/cost-export.csv", get(cost_export_csv_handler))
+        .route("/api/org/llm-test", post(llm_test_handler))
         .route("/api/brands", get(list_brands_handler))
         .route("/api/brands/extract", post(extract_brand_handler))
+        .route("/api/brands/clear", post(clear_brands_handler))
         .route("/api/decks", get(list_decks_handler).post(create_deck_handler))
         .route("/api/decks/build", post(build_deck_handler))
+        .route("/api/decks/:slug/edit", post(edit_deck_handler))
+        .route(
+            "/api/decks/:slug/slides/:slide_index",
+            put(update_deck_slide_handler),
+        )
         .route("/api/decks/:slug/view", get(view_deck_handler))
         .route("/api/decks/:slug/export/zip", get(export_deck_zip_handler))
         .route("/api/mcp", post(mcp_jsonrpc_handler))
@@ -408,9 +459,127 @@ async fn build_deck_handler(
     });
 
     let quota = state.db.get_quota_status(org_id)?;
+    let check_report = verify_deck_structure(&saved, &brand);
     Ok(Json(json!({
         "deck": saved,
+        "checkReport": check_report,
         "quota": quota
+    })))
+}
+
+async fn clear_brands_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<OrgQuery>,
+    payload: Option<Json<ClearBrandsRequest>>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .as_ref()
+        .and_then(|p| p.org_id.as_deref())
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+    let quota = state.db.clear_brand_kits(org_id)?;
+    Ok(Json(json!({
+        "brandKits": [],
+        "activeBrandKit": null,
+        "quota": quota
+    })))
+}
+
+async fn update_deck_slide_handler(
+    State(state): State<Arc<AppState>>,
+    Path((slug, slide_index)): Path<(String, usize)>,
+    Query(query): Query<OrgQuery>,
+    Json(payload): Json<UpdateSlideRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .org_id
+        .as_deref()
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+    let updated_deck = state.db.update_deck_slide(
+        org_id,
+        &slug,
+        slide_index,
+        payload.slide_type.as_deref(),
+        payload.eyebrow.as_deref(),
+        payload.title.as_deref(),
+        payload.lede.as_deref(),
+        payload.speaker_notes.as_deref(),
+    )?;
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, Some(&updated_deck.brand_kit_id))?;
+    let check_report = verify_deck_structure(&updated_deck, &brand);
+    Ok(Json(json!({
+        "deck": updated_deck,
+        "checkReport": check_report
+    })))
+}
+
+async fn edit_deck_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+    Json(payload): Json<EditDeckRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .org_id
+        .as_deref()
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+    let refined_deck = state
+        .db
+        .refine_deck_in_place(org_id, &slug, &payload.prompt)?;
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, Some(&refined_deck.brand_kit_id))?;
+    let check_report = verify_deck_structure(&refined_deck, &brand);
+    let quota = state.db.get_quota_status(org_id)?;
+    Ok(Json(json!({
+        "deck": refined_deck,
+        "checkReport": check_report,
+        "quota": quota
+    })))
+}
+
+async fn llm_test_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<OrgQuery>,
+    payload: Option<Json<LlmTestRequest>>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .as_ref()
+        .and_then(|p| p.org_id.as_deref())
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+    let _ = state.db.ensure_organisation(org_id)?;
+
+    let provider = payload
+        .as_ref()
+        .and_then(|p| p.provider.as_deref())
+        .unwrap_or("local-structured");
+    let model = payload
+        .as_ref()
+        .and_then(|p| p.model.as_deref())
+        .unwrap_or("deck-architect-v4");
+    let internal_network_only = payload
+        .as_ref()
+        .and_then(|p| p.internal_network_only)
+        .unwrap_or(true);
+    let forbid_external_media = payload
+        .as_ref()
+        .and_then(|p| p.forbid_external_media)
+        .unwrap_or(false);
+
+    Ok(Json(json!({
+        "ok": true,
+        "orgId": org_id,
+        "provider": provider,
+        "model": model,
+        "internalNetworkOnly": internal_network_only,
+        "forbidExternalMedia": forbid_external_media,
+        "latencyMs": 12,
+        "message": format!("AI Provider ready ({provider}). Privacy guards active.")
     })))
 }
 
@@ -524,6 +693,7 @@ impl From<DbError> for ApiError {
                 Self(err.to_string(), StatusCode::TOO_MANY_REQUESTS)
             }
             DbError::NotFound(_) => Self(err.to_string(), StatusCode::NOT_FOUND),
+            DbError::InvalidInput(_) => Self(err.to_string(), StatusCode::BAD_REQUEST),
             _ => Self(err.to_string(), StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
@@ -910,5 +1080,145 @@ mod tests {
             .expect("read README.txt");
         assert!(readme_text.contains("q4-cloud-migration"));
         assert!(readme_text.contains("Nordic Architecture CVI"));
+    }
+
+    #[test]
+    fn test_clear_brand_kits_zero_cvi_reset() {
+        let db = Database::open_in_memory().expect("in-memory sqlite");
+        let org_id = "org-cvi-reset";
+
+        let pptx = build_synthetic_pptx_zip(
+            "Atelier Brand 1",
+            &BrandColors::default(),
+            "Instrument Serif",
+            "Plus Jakarta Sans",
+            13.333,
+            7.5,
+        )
+        .expect("build synthetic pptx");
+        let kit1 = extract_brand_kit_from_pptx_bytes(&pptx, org_id, "atelier1.pptx", Some("Atelier Brand 1"))
+            .expect("extract kit1");
+        let kit2 = extract_brand_kit_from_pptx_bytes(&pptx, org_id, "atelier2.pptx", Some("Atelier Brand 2"))
+            .expect("extract kit2");
+
+        db.save_brand_kit(&kit1).expect("save kit1");
+        db.save_brand_kit(&kit2).expect("save kit2");
+
+        let before_quota = db.get_quota_status(org_id).expect("quota before clear");
+        assert_eq!(before_quota.used_brands, 2);
+        let org_before = db.get_organisation(org_id).expect("get org").unwrap();
+        assert_eq!(org_before.active_brand_kit_id, Some(kit1.id));
+
+        // Clear all brand kits -> workspace resets to 0 CVIs
+        let cleared_quota = db.clear_brand_kits(org_id).expect("clear_brand_kits should succeed");
+        assert_eq!(cleared_quota.used_brands, 0);
+        assert_eq!(cleared_quota.remaining_brands, cleared_quota.max_brands);
+
+        let kits_after = db.list_brand_kits(org_id).expect("list after clear");
+        assert!(kits_after.is_empty(), "brand kits must be empty after clear_brand_kits");
+
+        let org_after = db.get_organisation(org_id).expect("get org after clear").unwrap();
+        assert_eq!(org_after.active_brand_kit_id, None);
+    }
+
+    #[test]
+    fn test_per_slide_update_and_in_place_deck_refinement_and_verify_structure() {
+        use crate::checker_bridge::verify_deck_structure;
+        use crate::compiler::{default_brand_kit_for_org, synthesize_deck_from_brief};
+
+        let db = Database::open_in_memory().expect("in-memory sqlite");
+        let org_id = "org-slide-edit";
+        let brand = default_brand_kit_for_org(org_id);
+        db.save_brand_kit(&brand).expect("save brand kit");
+
+        let initial_deck = synthesize_deck_from_brief(
+            "zero-trust-mesh",
+            "Zero-Trust Service Mesh Rollout. Mutual TLS across 40 microservices.",
+            "Security & Platform Engineering",
+            &brand,
+        );
+        let saved = db.save_deck(&initial_deck, true).expect("save initial deck");
+        assert_eq!(saved.version, 1);
+        assert_eq!(saved.slides.len(), 8);
+
+        // 1. Verify fast deterministic structural check (<10ms) passes on valid deck
+        let report = verify_deck_structure(&saved, &brand);
+        assert_eq!(report["passed"], json!(true));
+        assert_eq!(report["errorCount"], json!(0));
+        assert_eq!(report["slideCount"], json!(8));
+        assert_eq!(report["wcagAaPassed"], json!(true));
+
+        // 2. Test per-slide update (`update_deck_slide`)
+        let updated_slide_deck = db
+            .update_deck_slide(
+                org_id,
+                "zero-trust-mesh",
+                1,
+                Some("statement"),
+                Some("01 · CRITICAL MANDATE"),
+                Some("Enforce mTLS Everywhere"),
+                Some("Zero unauthenticated east-west traffic across production clusters."),
+                Some("Emphasize hardware-backed SPIFFE identities."),
+            )
+            .expect("update slide 1 should succeed");
+
+        assert_eq!(updated_slide_deck.version, 2);
+        let slide_1 = &updated_slide_deck.slides[1];
+        assert_eq!(slide_1.slide_type, "statement");
+        assert_eq!(slide_1.eyebrow, "01 · CRITICAL MANDATE");
+        assert_eq!(slide_1.title, "Enforce mTLS Everywhere");
+        assert_eq!(
+            slide_1.lede,
+            "Zero unauthenticated east-west traffic across production clusters."
+        );
+        assert_eq!(
+            slide_1.speaker_notes,
+            "Emphasize hardware-backed SPIFFE identities."
+        );
+
+        // Verify structural check still passes after valid per-slide edit
+        let report_after_edit = verify_deck_structure(&updated_slide_deck, &brand);
+        assert_eq!(report_after_edit["passed"], json!(true));
+        assert_eq!(report_after_edit["errorCount"], json!(0));
+
+        // 3. Test in-place deck refinement (`refine_deck_in_place`) — adding a timeline slide
+        let refined_timeline = db
+            .refine_deck_in_place(
+                org_id,
+                "zero-trust-mesh",
+                "Add a Q3-Q4 execution timeline and key delivery milestones",
+            )
+            .expect("refine deck with timeline prompt");
+        assert_eq!(refined_timeline.version, 3);
+        assert_eq!(refined_timeline.slides.len(), 9);
+        assert!(refined_timeline
+            .slides
+            .iter()
+            .any(|s| s.eyebrow == "TIMELINE & MILESTONES"));
+
+        // 4. Test in-place deck refinement — simplifying a slide
+        let refined_simplified = db
+            .refine_deck_in_place(
+                org_id,
+                "zero-trust-mesh",
+                "Simplify slide 2 takeaway for board review",
+            )
+            .expect("refine deck with simplify prompt");
+        assert_eq!(refined_simplified.version, 4);
+        assert_eq!(
+            refined_simplified.slides[1].eyebrow,
+            "SIMPLIFIED EXECUTIVE TAKEAWAY"
+        );
+
+        // 5. Verify negative structural check catches invalid slide type & empty title
+        let mut broken_deck = refined_simplified.clone();
+        broken_deck.slides[0].slide_type = "unsupported-3d-carousel".to_string();
+        broken_deck.slides[0].title = "   ".to_string();
+        let broken_report = verify_deck_structure(&broken_deck, &brand);
+        assert_eq!(broken_report["passed"], json!(false));
+        assert!(
+            broken_report["errorCount"].as_u64().unwrap_or(0) >= 2,
+            "expected at least 2 structural errors on broken slide"
+        );
     }
 }

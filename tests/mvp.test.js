@@ -499,3 +499,33 @@ test('10. Phase 3: Zero-Brand CVI Reset (POST /api/brands/clear) & Live LLM Conn
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('11. Phase 4: React + TypeScript Vite Frontend & Containerised Deployment Manifests', async () => {
+  // 1. Verify React + TypeScript frontend source & production build output
+  const appTsxPath = path.join(process.cwd(), 'frontend', 'src', 'App.tsx');
+  const distIndexPath = path.join(process.cwd(), 'frontend', 'dist', 'index.html');
+  assert.ok(fs.existsSync(appTsxPath), 'Expected frontend/src/App.tsx to exist');
+  const appTsx = fs.readFileSync(appTsxPath, 'utf8');
+  assert.ok(appTsx.includes('StudioView') && appTsx.includes('QuotaUpgradeModal'), 'Expected core React views in frontend/src/App.tsx');
+
+  assert.ok(fs.existsSync(distIndexPath), 'Expected frontend/dist/index.html to exist from Vite build');
+  const distHtml = fs.readFileSync(distIndexPath, 'utf8');
+  assert.ok(distHtml.includes('<div id="root">') && distHtml.includes('script'), 'Expected valid bundled HTML in frontend/dist/index.html');
+
+  // 2. Verify containerised deployment manifests
+  const dockerfilePath = path.join(process.cwd(), 'Dockerfile');
+  const composePath = path.join(process.cwd(), 'docker-compose.yml');
+  const envExamplePath = path.join(process.cwd(), '.env.example');
+
+  assert.ok(fs.existsSync(dockerfilePath), 'Expected Dockerfile to exist');
+  const dockerfile = fs.readFileSync(dockerfilePath, 'utf8');
+  assert.ok(dockerfile.includes('EXPOSE 3456'), 'Expected Dockerfile to expose port 3456');
+
+  assert.ok(fs.existsSync(composePath), 'Expected docker-compose.yml to exist');
+  const compose = fs.readFileSync(composePath, 'utf8');
+  assert.ok(compose.includes('deck-studio-app') && compose.includes('deck-studio-rust-api'), 'Expected both app and rust-api services in docker-compose.yml');
+
+  assert.ok(fs.existsSync(envExamplePath), 'Expected .env.example to exist');
+  const envExample = fs.readFileSync(envExamplePath, 'utf8');
+  assert.ok(envExample.includes('DATABASE_URL=') && envExample.includes('PORT=3456'), 'Expected DATABASE_URL and PORT in .env.example');
+});

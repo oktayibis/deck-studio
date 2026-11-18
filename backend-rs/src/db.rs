@@ -79,6 +79,7 @@ pub enum DbError {
         daily_deck_limit: u32,
     },
     NotFound(String),
+    InvalidInput(String),
 }
 
 impl std::fmt::Display for DbError {
@@ -103,6 +104,7 @@ impl std::fmt::Display for DbError {
                 "Daily presentation limit reached ({decks_created_today}/{daily_deck_limit} decks today) on plan \"{tier}\"."
             ),
             Self::NotFound(msg) => write!(f, "{msg}"),
+            Self::InvalidInput(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -509,6 +511,117 @@ impl Database {
             return Ok(first);
         }
         Ok(crate::compiler::default_brand_kit_for_org(org_id))
+    }
+
+    /// Clears all Brand Kits for the organisation (`used_brands = 0`, `active_brand_kit_id = None`)
+    /// so the workspace resets to a zero-CVI onboarding state.
+    pub fn clear_brand_kits(&self, org_id: &str) -> Result<SubscriptionQuota, DbError> {
+        let mut org = self.ensure_organisation(org_id)?;
+        {
+            let conn = self
+                .conn
+                .lock()
+                .map_err(|e| DbError::Sqlite(e.to_string()))?;
+            conn.execute("DELETE FROM brand_kits WHERE org_id = ?1", params![org_id])?;
+        }
+        org.active_brand_kit_id = None;
+        self.upsert_organisation(&org)?;
+        let _ = self.append_audit_log(&AuditLog {
+            id: format!("audit-clear-brands-{org_id}"),
+            org_id: org_id.to_string(),
+            action: "brand.cleared_all".to_string(),
+            actor: "rust-engine".to_string(),
+            target: org_id.to_string(),
+            detail: "Cleared all Brand Kits for workspace (0-CVI reset)".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        });
+        self.get_quota_status(org_id)
+    }
+
+    /// Updates a single slide's `type`, `eyebrow`, `title`, `lede`, and `speaker_notes` in SQLite.
+    pub fn update_deck_slide(
+        &self,
+        org_id: &str,
+        slug: &str,
+        slide_index: usize,
+        slide_type: Option<&str>,
+        eyebrow: Option<&str>,
+        title: Option<&str>,
+        lede: Option<&str>,
+        speaker_notes: Option<&str>,
+    ) -> Result<Deck, DbError> {
+        let mut deck = self
+            .get_deck(org_id, slug)?
+            .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+
+        let slide_count = deck.slides.len();
+        let slide = deck.slides.get_mut(slide_index).ok_or_else(|| {
+            DbError::InvalidInput(format!(
+                "Invalid slide index {slide_index} (deck has {slide_count} slides)"
+            ))
+        })?;
+
+        if let Some(t) = slide_type {
+            slide.slide_type = t.to_string();
+        }
+        if let Some(e) = eyebrow {
+            slide.eyebrow = e.to_string();
+        }
+        if let Some(ti) = title {
+            slide.title = ti.to_string();
+        }
+        if let Some(l) = lede {
+            slide.lede = l.to_string();
+        }
+        if let Some(n) = speaker_notes {
+            slide.speaker_notes = n.to_string();
+        }
+
+        deck.version = deck.version.saturating_add(1);
+        let saved = self.save_deck(&deck, false)?;
+        let _ = self.append_audit_log(&AuditLog {
+            id: format!("audit-slide-{}-{}-v{}", saved.slug, slide_index, saved.version),
+            org_id: org_id.to_string(),
+            action: "deck.slide_updated".to_string(),
+            actor: "rust-engine".to_string(),
+            target: format!("{}:slide:{}", saved.slug, slide_index),
+            detail: format!("Updated slide {} on deck '{}' (v{})", slide_index + 1, saved.slug, saved.version),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        });
+        Ok(saved)
+    }
+
+    /// Refines an existing deck in place based on a natural-language `prompt` and persists the new version in SQLite.
+    pub fn refine_deck_in_place(
+        &self,
+        org_id: &str,
+        slug: &str,
+        prompt: &str,
+    ) -> Result<Deck, DbError> {
+        if prompt.trim().is_empty() {
+            return Err(DbError::InvalidInput(
+                "Refinement prompt is required.".to_string(),
+            ));
+        }
+
+        let deck = self
+            .get_deck(org_id, slug)?
+            .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+        let brand = self.resolve_brand_kit(org_id, Some(&deck.brand_kit_id))?;
+        let refined = crate::compiler::refine_deck_with_prompt(&deck, prompt, &brand);
+        let saved = self.save_deck(&refined, false)?;
+
+        let _ = self.append_audit_log(&AuditLog {
+            id: format!("audit-edit-{}-v{}", saved.slug, saved.version),
+            org_id: org_id.to_string(),
+            action: "deck.refined".to_string(),
+            actor: "rust-engine".to_string(),
+            target: saved.slug.clone(),
+            detail: format!("Refined deck '{}' (v{}): {}", saved.slug, saved.version, prompt.trim()),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        });
+
+        Ok(saved)
     }
 
     pub fn record_telemetry(&self, entry: &UsageTelemetry) -> Result<(), DbError> {
