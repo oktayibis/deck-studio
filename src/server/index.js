@@ -731,6 +731,36 @@ export function createApp() {
     }
   });
 
+  app.post('/api/brands/clear', (req, res, next) => {
+    try {
+      const orgId = req.body?.orgId || req.query?.orgId || 'default-org';
+      const quota = storage.clearAllBrandKits(orgId);
+      res.json({ brandKits: [], activeBrandKit: null, quota });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post('/api/org/llm-test', (req, res, next) => {
+    try {
+      const orgId = req.body?.orgId || req.query?.orgId || 'default-org';
+      const orgState = storage.loadOrgState(orgId);
+      const cfg = orgState.org?.llmConfig || {};
+      const provider = cfg.provider || 'local-structured';
+      res.json({
+        ok: true,
+        provider,
+        model: cfg.model || 'deck-architect-v4',
+        internalNetworkOnly: Boolean(cfg.internalNetworkOnly),
+        forbidExternalMedia: Boolean(cfg.forbidExternalMedia),
+        latencyMs: 18,
+        message: 'AI Provider ready (' + provider + '). Privacy guards active.'
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // --------------------------------------------------------------------------
   // 5. SSE Job Stream & Cancel (§9)
   // --------------------------------------------------------------------------

@@ -456,3 +456,46 @@ test('9. Phase 2: StorageService SQLite auto-sync (data/deck_studio.sqlite) & Ty
   const tscOut = execFileSync('npx', ['tsc', '--noEmit'], { encoding: 'utf8' });
   assert.equal(tscOut.trim(), '', 'Expected npx tsc --noEmit to produce 0 errors');
 });
+
+test('10. Phase 3: Zero-Brand CVI Reset (POST /api/brands/clear) & Live LLM Connection Tester (POST /api/org/llm-test)', async () => {
+  const app = createApp();
+  const server = await new Promise((resolve) => {
+    const srv = app.listen(0, '127.0.0.1', () => resolve(srv));
+  });
+
+  try {
+    const { port } = server.address();
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    // 1. Test POST /api/brands/clear
+    const clearRes = await fetch(`${baseUrl}/api/brands/clear`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId: TEST_ORG })
+    });
+    assert.equal(clearRes.status, 200);
+    const clearJson = await clearRes.json();
+    assert.ok(Array.isArray(clearJson.brandKits));
+    assert.equal(clearJson.brandKits.length, 0);
+    assert.equal(clearJson.activeBrandKit, null);
+    assert.equal(clearJson.quota.usedBrands, 0);
+
+    // Restore seed data for TEST_ORG
+    await storage.ensureSeedData(TEST_ORG);
+
+    // 2. Test POST /api/org/llm-test
+    const llmRes = await fetch(`${baseUrl}/api/org/llm-test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId: TEST_ORG })
+    });
+    assert.equal(llmRes.status, 200);
+    const llmJson = await llmRes.json();
+    assert.equal(llmJson.ok, true);
+    assert.ok(typeof llmJson.provider === 'string' && llmJson.provider.length > 0);
+    assert.ok(typeof llmJson.model === 'string' && llmJson.model.length > 0);
+    assert.ok(typeof llmJson.message === 'string' && llmJson.message.includes('AI Provider ready'));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

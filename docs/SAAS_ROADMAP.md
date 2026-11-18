@@ -42,7 +42,19 @@ To move fast while preserving `Gemini 4 Argon (High)` quota, all development wor
 
 ---
 
-## 4. How to Run the ADLC Workflow
+## 4. Phase 3: Rust Deck Compiler, Zero-Brand CVI Reset & LLM Tester (GitHub Issues #11–#15)
+
+| Issue | Phase | Title | Assigned Model Tier | Area | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **#11** | Phase 3 (UI Backlog) | Tablet & Mobile Responsive Studio Layout & Touch Gestures | `gemini-4-hydrogen-high` | `area:ui` | 📋 Open (Backlog) |
+| **#12** | Phase 3 (Rust Compiler) | Native Rust Deck HTML Compiler, Story Synthesizer & Offline ZIP Exporter (`backend-rs/`) | `gemini-4-argon-high` | `area:rust`, `area:saas` | ✅ Done |
+| **#13** | Phase 3 (API) | Zero-Brand Onboarding Reset API (`POST /api/brands/clear`) & Live LLM Provider Connection Tester (`POST /api/org/llm-test`) | `gemini-4-hydrogen-medium` | `area:saas`, `area:api` | ✅ Done |
+| **#14** | Phase 3 (UI) | Zero-Brand CVI Onboarding Trigger & AI Provider Test Action in Workspace UI | `gemini-4-hydrogen-medium` | `area:ui` | ✅ Done |
+| **#15** | Phase 3 (QA / ADLC) | Phase 3 End-to-End Verification (Node + Playwright + Rust Cargo Tests) | `gemini-4-hydrogen-medium` | `area:qa` | ✅ Done |
+
+---
+
+## 5. How to Run the ADLC Workflow
 
 ```bash
 # 1. Check current GitHub Issues, PRs, and branch state

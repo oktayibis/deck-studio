@@ -245,7 +245,11 @@
         <h1 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;">Brand CVI Profiles</h1>
         <p style="color:var(--text-secondary);font-size:13px;">Create your own visual identity from a PowerPoint template, website URL, or colour palette.</p>
       </div>
-      <span class="badge badge-pass" id="brand-quota-badge">2 of 4 Brands</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button type="button" class="btn btn-sm" id="reset-zero-brands-btn" title="Clear brands to test 0-Brand CVI Onboarding">Start Fresh (0 CVI)</button>
+        <button type="button" class="btn btn-sm" id="seed-sample-brands-btn" title="Restore sample CVI templates">Load Sample CVI</button>
+        <span class="badge badge-pass" id="brand-quota-badge">2 of 4 Brands</span>
+      </div>
     </div>
 
     <div class="brand-cards-strip" id="brand-profiles-strip"></div>
@@ -512,7 +516,10 @@
             <input type="checkbox" id="ent-forbid-media" />
             <span>Never send raw media binaries to external LLMs</span>
           </label>
-          <button type="button" class="btn btn-primary" id="save-ent-settings-btn">Save Policy</button>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-primary" id="save-ent-settings-btn">Save Policy</button>
+            <button type="button" class="btn" id="test-llm-conn-btn">Test AI Connection</button>
+          </div>
 
           <details>
             <summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">Audit Log ▾</summary>

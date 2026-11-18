@@ -469,6 +469,48 @@ impl Database {
         Ok(out)
     }
 
+    pub fn get_deck(&self, org_id: &str, slug: &str) -> Result<Option<Deck>, DbError> {
+        let _ = self.ensure_organisation(org_id)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DbError::Sqlite(e.to_string()))?;
+        let raw: Option<String> = conn
+            .query_row(
+                "SELECT deck_json FROM decks WHERE org_id = ?1 AND slug = ?2",
+                params![org_id, slug],
+                |r| r.get(0),
+            )
+            .optional()?;
+        match raw {
+            Some(json_str) => Ok(Some(serde_json::from_str::<Deck>(&json_str)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn resolve_brand_kit(
+        &self,
+        org_id: &str,
+        preferred_id: Option<&str>,
+    ) -> Result<BrandKit, DbError> {
+        let org = self.ensure_organisation(org_id)?;
+        let kits = self.list_brand_kits(org_id)?;
+        if let Some(pref) = preferred_id.filter(|s| !s.trim().is_empty()) {
+            if let Some(found) = kits.iter().find(|k| k.id == pref) {
+                return Ok(found.clone());
+            }
+        }
+        if let Some(active_id) = org.active_brand_kit_id.as_deref() {
+            if let Some(found) = kits.iter().find(|k| k.id == active_id) {
+                return Ok(found.clone());
+            }
+        }
+        if let Some(first) = kits.into_iter().next() {
+            return Ok(first);
+        }
+        Ok(crate::compiler::default_brand_kit_for_org(org_id))
+    }
+
     pub fn record_telemetry(&self, entry: &UsageTelemetry) -> Result<(), DbError> {
         let conn = self
             .conn

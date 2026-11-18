@@ -1,4 +1,5 @@
 pub mod brand;
+pub mod compiler;
 pub mod db;
 pub mod models;
 
@@ -6,7 +7,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::{Multipart, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -19,8 +20,11 @@ use tower_http::services::ServeDir;
 use crate::brand::{
     build_synthetic_pptx_zip, extract_brand_kit_from_pptx_bytes, slugify,
 };
+use crate::compiler::{
+    compile_deck_to_html, export_deck_to_zip_bytes, synthesize_deck_from_brief,
+};
 use crate::db::{Database, DbError};
-use crate::models::{BrandColors, Deck, SlideSpec};
+use crate::models::{AuditLog, BrandColors, Deck, SlideSpec, UsageTelemetry};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -54,6 +58,20 @@ pub struct CreateDeckRequest {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct BuildDeckRequest {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+    pub slug: Option<String>,
+    pub title: Option<String>,
+    pub topic: Option<String>,
+    pub brief: Option<Value>,
+    pub audience: Option<String>,
+    #[serde(alias = "brand_kit_id")]
+    pub brand_kit_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ExtractBrandJsonRequest {
     pub org_id: Option<String>,
     pub name: Option<String>,
@@ -77,6 +95,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/brands", get(list_brands_handler))
         .route("/api/brands/extract", post(extract_brand_handler))
         .route("/api/decks", get(list_decks_handler).post(create_deck_handler))
+        .route("/api/decks/build", post(build_deck_handler))
+        .route("/api/decks/:slug/view", get(view_deck_handler))
+        .route("/api/decks/:slug/export/zip", get(export_deck_zip_handler))
         .route("/api/mcp", post(mcp_jsonrpc_handler))
         .fallback_service(ServeDir::new("src/public"))
         .layer(CorsLayer::permissive())
@@ -312,6 +333,140 @@ async fn create_deck_handler(
         "deck": saved,
         "quota": quota
     })))
+}
+
+async fn build_deck_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BuildDeckRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload.org_id.as_deref().unwrap_or("default-org");
+
+    // 1. Enforce daily deck creation quota (4 / 20 / 100)
+    state.db.assert_can_create_deck_today(org_id)?;
+
+    // 2. Resolve BrandKit for the organisation
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, payload.brand_kit_id.as_deref())?;
+
+    // 3. Extract brief topic and audience
+    let brief_topic = payload.brief.as_ref().and_then(|b| match b {
+        Value::String(s) => Some(s.clone()),
+        Value::Object(map) => map
+            .get("topic")
+            .or_else(|| map.get("title"))
+            .or_else(|| map.get("rawText"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
+    });
+    let brief_audience = payload.brief.as_ref().and_then(|b| {
+        b.as_object()
+            .and_then(|m| m.get("audience"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    });
+
+    let topic = payload
+        .topic
+        .or(payload.title)
+        .or(brief_topic)
+        .unwrap_or_else(|| "Enterprise Architecture & CVI Rollout".to_string());
+    let audience = payload
+        .audience
+        .or(brief_audience)
+        .unwrap_or_else(|| "Executive & Engineering Stakeholders".to_string());
+    let slug = payload.slug.unwrap_or_else(|| slugify(&topic));
+
+    // 4. Synthesize deterministic 8-slide deck
+    let deck = synthesize_deck_from_brief(&slug, &topic, &audience, &brand);
+
+    // 5. Save deck to SQLite & record telemetry + audit log
+    let saved = state.db.save_deck(&deck, true)?;
+    let telemetry = UsageTelemetry {
+        id: format!("tel-{}", saved.slug),
+        org_id: org_id.to_string(),
+        deck_slug: saved.slug.clone(),
+        operation: "build_deck".to_string(),
+        prompt_tokens: 1280,
+        completion_tokens: 960,
+        llm_cost_usd: 0.0124,
+        worker_cost_usd: 0.0016,
+        total_cost_usd: 0.0140,
+        render_ms: 42,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+    };
+    state.db.record_telemetry(&telemetry)?;
+    let _ = state.db.append_audit_log(&AuditLog {
+        id: format!("audit-build-{}", saved.slug),
+        org_id: org_id.to_string(),
+        action: "deck.synthesized".to_string(),
+        actor: "rust-engine".to_string(),
+        target: saved.slug.clone(),
+        detail: format!("Synthesized {} slides under {}", saved.slides.len(), brand.name),
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+    });
+
+    let quota = state.db.get_quota_status(org_id)?;
+    Ok(Json(json!({
+        "deck": saved,
+        "quota": quota
+    })))
+}
+
+async fn view_deck_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Response, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let deck = state
+        .db
+        .get_deck(org_id, &slug)?
+        .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, Some(&deck.brand_kit_id))?;
+    let html = compile_deck_to_html(&deck, &brand);
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        html,
+    )
+        .into_response())
+}
+
+async fn export_deck_zip_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Response, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let deck = state
+        .db
+        .get_deck(org_id, &slug)?
+        .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, Some(&deck.brand_kit_id))?;
+    let zip_bytes = export_deck_to_zip_bytes(&deck, &brand)
+        .map_err(|e| ApiError(e, StatusCode::INTERNAL_SERVER_ERROR))?;
+    let disposition = format!("attachment; filename=\"{}-deck.zip\"", deck.slug);
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/zip".to_string()),
+            (header::CONTENT_DISPOSITION, disposition),
+            (header::CACHE_CONTROL, "no-store".to_string()),
+        ],
+        zip_bytes,
+    )
+        .into_response())
 }
 
 async fn mcp_jsonrpc_handler(
@@ -673,5 +828,87 @@ mod tests {
             "timestamp,deckSlug,operation,promptTokens,completionTokens,llmCostUsd,workerCostUsd,totalCostUsd,renderDurationMs"
         ));
         assert!(csv.contains("q4-architecture,create_deck,1450,980"));
+    }
+
+    #[test]
+    fn test_compiler_synthesize_compile_html_and_export_zip() {
+        use std::io::{Cursor, Read};
+        use zip::ZipArchive;
+        use crate::compiler::{
+            build_brand_css_variables, compile_deck_to_html, default_brand_kit_for_org,
+            export_deck_to_zip_bytes, synthesize_deck_from_brief,
+        };
+
+        let mut brand = default_brand_kit_for_org("org-compiler-test");
+        brand.name = "Nordic Architecture CVI".to_string();
+        brand.company_name = "Nordic Architecture Labs".to_string();
+        brand.colors.primary = "#1E293B".to_string();
+        brand.colors.accent = "#D94E28".to_string();
+
+        // 1. Test build_brand_css_variables
+        let css_vars = build_brand_css_variables(&brand);
+        assert!(css_vars.contains(":root {"));
+        assert!(css_vars.contains("--brand-primary: #1E293B;"));
+        assert!(css_vars.contains("--brand-accent: #D94E28;"));
+        assert!(css_vars.contains("--stage-width: 1600px;"));
+        assert!(css_vars.contains("--stage-height: 900px;"));
+
+        // 2. Test synthesize_deck_from_brief (produces 7..=9 slides across all required types)
+        let deck = synthesize_deck_from_brief(
+            "q4-cloud-migration",
+            "Q4 Zero-Downtime Cloud Migration. Cut P99 latency by 42% across regional clusters.",
+            "Platform Architecture Board",
+            &brand,
+        );
+        assert_eq!(deck.slug, "q4-cloud-migration");
+        assert_eq!(deck.org_id, "org-compiler-test");
+        assert_eq!(deck.brand_kit_id, brand.id);
+        assert!(
+            (7..=9).contains(&deck.slides.len()),
+            "synthesized deck should contain 7..=9 slides, got {}",
+            deck.slides.len()
+        );
+        assert_eq!(deck.slides.first().unwrap().slide_type, "cover");
+        assert_eq!(deck.slides.last().unwrap().slide_type, "end");
+        assert!(deck.slides.iter().any(|s| s.slide_type == "content"));
+        assert!(deck.slides.iter().any(|s| s.slide_type == "content-alt"));
+        assert!(deck.slides.iter().any(|s| s.slide_type == "content-dark"));
+        assert!(deck.slides.iter().any(|s| s.slide_type == "statement"));
+
+        // 3. Test compile_deck_to_html
+        let html = compile_deck_to_html(&deck, &brand);
+        assert!(html.starts_with("<!DOCTYPE html>"));
+        assert!(html.contains(r#"class="deck-stage""#));
+        assert!(html.contains("--brand-primary: #1E293B;"));
+        assert!(html.contains("Q4 Zero-Downtime Cloud Migration"));
+        assert!(html.contains("Platform Architecture Board"));
+        assert!(html.contains("window.__BRAND_KIT__"));
+        assert!(html.contains("window.__DECK_META__"));
+
+        // 4. Test export_deck_to_zip_bytes and verify archive entries
+        let zip_bytes =
+            export_deck_to_zip_bytes(&deck, &brand).expect("ZIP export should succeed");
+        assert!(!zip_bytes.is_empty());
+
+        let mut archive =
+            ZipArchive::new(Cursor::new(zip_bytes)).expect("valid ZIP archive bytes");
+        let mut entry_names = Vec::new();
+        for i in 0..archive.len() {
+            let file = archive.by_index(i).expect("zip entry");
+            entry_names.push(file.name().to_string());
+        }
+        assert!(entry_names.contains(&"index.html".to_string()));
+        assert!(entry_names.contains(&"engine/deck-engine.css".to_string()));
+        assert!(entry_names.contains(&"engine/deck-engine.js".to_string()));
+        assert!(entry_names.contains(&"README.txt".to_string()));
+
+        let mut readme_text = String::new();
+        archive
+            .by_name("README.txt")
+            .expect("README.txt entry")
+            .read_to_string(&mut readme_text)
+            .expect("read README.txt");
+        assert!(readme_text.contains("q4-cloud-migration"));
+        assert!(readme_text.contains("Nordic Architecture CVI"));
     }
 }

@@ -981,6 +981,46 @@ class DeckStudioApp {
       const report = await res.json();
       this.showToast(report.humanSummary);
     });
+
+    document.getElementById('reset-zero-brands-btn')?.addEventListener('click', async () => {
+      const res = await fetch('/api/brands/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        this.showToast(data.error || 'Could not reset Brand CVIs');
+        return;
+      }
+      await this.refreshBootstrap();
+      this.switchView('studio');
+      this.showToast('Workspace reset to 0 Brand CVIs — create your own CVI to begin!');
+    });
+
+    document.getElementById('seed-sample-brands-btn')?.addEventListener('click', async () => {
+      const res = await fetch('/api/brands/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          createNew: true,
+          sampleTemplate: 'nordic-grid-corporate.pptx',
+          name: 'Nordic Grid',
+          companyName: 'Nordic Grid'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 403 || data.code === 'BRAND_QUOTA_EXCEEDED') {
+          this.openQuotaUpgradeModal(data.error || 'Brand Kit quota reached.');
+        }
+        this.showToast(data.error || 'Could not load sample CVI');
+        return;
+      }
+      await this.refreshBootstrap();
+      this.refreshBrandGalleryIframe();
+      this.showToast(`Loaded sample CVI "${data.brandKit?.name || 'Nordic Grid'}"`);
+    });
   }
 
   refreshBrandGalleryIframe() {
@@ -1256,6 +1296,20 @@ class DeckStudioApp {
         await this.refreshBootstrap();
         this.showToast('Saved workspace AI & privacy settings');
       }
+    });
+
+    document.getElementById('test-llm-conn-btn')?.addEventListener('click', async () => {
+      const res = await fetch('/api/org/llm-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        this.showToast(data.error || 'AI connection test failed');
+        return;
+      }
+      this.showToast(data.message || 'AI Provider ready.');
     });
   }
 
