@@ -88,10 +88,19 @@ async function main() {
     });
     const port = srv.address().port;
 
-    const uiPage = await browser.newPage({ viewport: { width: 1680, height: 1020 } });
+    const uiPage = await browser.newPage({ viewport: { width: 1600, height: 960 } });
     await uiPage.goto(`http://127.0.0.1:${port}`, { waitUntil: 'networkidle' });
     await uiPage.waitForTimeout(500);
     await uiPage.screenshot({ path: path.join(ARTIFACT_DIR, 'ui-01-studio.png') });
+
+    // Toggle Dark Mode and capture Dark Studio screenshot
+    await uiPage.click('#theme-toggle-btn');
+    await uiPage.waitForTimeout(300);
+    await uiPage.screenshot({ path: path.join(ARTIFACT_DIR, 'ui-04-studio-dark.png') });
+
+    // Switch back to Light Mode for Brand & Workspace screenshots
+    await uiPage.click('#theme-toggle-btn');
+    await uiPage.waitForTimeout(200);
 
     await uiPage.click('[data-view="brand"]');
     await uiPage.waitForTimeout(500);

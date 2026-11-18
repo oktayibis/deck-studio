@@ -58,6 +58,7 @@ class DeckStudioApp {
   }
 
   async init() {
+    this.initTheme();
     this.bindNavigation();
     this.bindStudioEvents();
     this.bindBrandSetupEvents();
@@ -66,6 +67,31 @@ class DeckStudioApp {
     this.bindQuotaModalEvents();
     this.restoreDraftFromStorage();
     await this.refreshBootstrap();
+  }
+
+  initTheme() {
+    let saved = 'light';
+    try {
+      saved = localStorage.getItem('deck_studio_theme') || 'light';
+    } catch {
+      saved = 'light';
+    }
+    document.documentElement.setAttribute('data-theme', saved);
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) {
+      btn.textContent = saved === 'dark' ? '☀' : '☾';
+      btn.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        btn.textContent = next === 'dark' ? '☀' : '☾';
+        try {
+          localStorage.setItem('deck_studio_theme', next);
+        } catch {
+          // ignore
+        }
+      });
+    }
   }
 
   showToast(message) {
@@ -130,6 +156,28 @@ class DeckStudioApp {
     document.getElementById('header-brand-select')?.addEventListener('change', async (e) => {
       await this.selectBrandKit(e.target.value);
     });
+
+    // Left sidebar segmented tabs (Compose Deck vs Slide & Check)
+    document.querySelectorAll('[data-sidebar-tab]').forEach((tabBtn) => {
+      tabBtn.addEventListener('click', () => {
+        const target = tabBtn.getAttribute('data-sidebar-tab');
+        this.switchSidebarTab(target);
+      });
+    });
+
+    document.getElementById('viewer-check-badge')?.addEventListener('click', () => {
+      this.switchSidebarTab('inspector');
+    });
+  }
+
+  switchSidebarTab(tabName) {
+    document.querySelectorAll('[data-sidebar-tab]').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-sidebar-tab') === tabName);
+    });
+    const composePane = document.getElementById('sidebar-pane-compose');
+    const inspectorPane = document.getElementById('sidebar-pane-inspector');
+    if (composePane) composePane.style.display = tabName === 'compose' ? 'flex' : 'none';
+    if (inspectorPane) inspectorPane.style.display = tabName === 'inspector' ? 'flex' : 'none';
   }
 
   switchView(viewName) {
@@ -611,11 +659,8 @@ class DeckStudioApp {
         .map(
           (s, idx) => `
         <button type="button" class="filmstrip-pill ${idx === this.activeSlideIndex ? 'active' : ''}" data-slide-jump="${idx}">
-          <div class="filmstrip-num">
-            <span>Slide ${String(idx + 1).padStart(2, '0')}</span>
-            <span style="color:var(--text-muted);font-weight:400;">${s.type}</span>
-          </div>
-          <div class="filmstrip-title">${s.title || `Slide ${idx + 1}`}</div>
+          <span class="filmstrip-num">${String(idx + 1).padStart(2, '0')}</span>
+          <span class="filmstrip-title">${s.title || `Slide ${idx + 1}`}</span>
         </button>`
         )
         .join('');

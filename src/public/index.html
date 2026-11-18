@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deck Studio — On-Brand AI Presentations</title>
+  <title>Deck Studio — Minimalist On-Brand Presentation Studio</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <!-- Clean, Calm Top Bar -->
+  <!-- Ultra-Clean 56px Top Bar -->
   <header class="app-topbar">
     <div class="brand-mark">
       <div class="brand-mark-icon">D</div>
@@ -15,192 +15,143 @@
     </div>
 
     <nav class="app-nav" role="tablist" aria-label="Main navigation">
-      <button type="button" class="nav-tab active" data-view="studio">Create &amp; Edit</button>
-      <button type="button" class="nav-tab" data-view="brand">Brand Kit</button>
-      <button type="button" class="nav-tab" data-view="library">My Decks</button>
-      <button type="button" class="nav-tab" data-view="gallery">Slide Gallery</button>
-      <button type="button" class="nav-tab" data-view="saas">Plan &amp; Quotas</button>
+      <button type="button" class="nav-tab active" data-view="studio">Studio</button>
+      <button type="button" class="nav-tab" data-view="brand">Brand CVI</button>
+      <button type="button" class="nav-tab" data-view="library">Library</button>
+      <button type="button" class="nav-tab" data-view="gallery">Gallery</button>
+      <button type="button" class="nav-tab" data-view="saas">Workspace</button>
     </nav>
 
     <div class="topbar-right">
-      <div class="brand-selector-pill" title="Active Brand Kit">
+      <div class="brand-selector-pill" title="Active Brand CVI">
         <div class="brand-selector-dots" id="header-brand-dots">
           <span class="brand-dot" style="background:#0F172A"></span>
           <span class="brand-dot" style="background:#B83214"></span>
           <span class="brand-dot" style="background:#FAF8F5"></span>
         </div>
-        <select id="header-brand-select" aria-label="Active Brand Kit" style="border:none;background:transparent;font-family:var(--font-sans);font-size:13px;font-weight:600;color:var(--text-primary);cursor:pointer;outline:none;"></select>
+        <select id="header-brand-select" aria-label="Active Brand Kit" style="border:none;background:transparent;font-family:var(--font-sans);font-size:12px;font-weight:500;color:var(--text-primary);cursor:pointer;outline:none;"></select>
       </div>
 
-      <button type="button" class="quota-pill" id="header-quota-pill" title="View plan & usage limits">
+      <button type="button" class="quota-pill" id="header-quota-pill" title="Plan & quota usage">
         <span class="quota-dot"></span>
-        <span id="header-quota-text">Pro · 2/4 Brands</span>
+        <span id="header-quota-text">Pro · 2/4 CVI</span>
+      </button>
+
+      <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" title="Switch Light / Dark theme" aria-label="Switch Light or Dark theme">
+        ◐
       </button>
     </div>
   </header>
 
   <!-- ========================================================================
-       1. CREATE & EDIT (STUDIO)
+       1. STUDIO (Minimalist 2-Pane Creative Canvas)
        ======================================================================== -->
   <main id="view-studio" class="view-panel active">
-    <section
-      id="zero-brand-onboarding-banner"
-      class="surface-card"
-      style="display:none;flex-direction:row;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;background-color:var(--accent-soft);border-color:rgba(200, 75, 49, 0.28);"
-      aria-label="Brand CVI Onboarding"
-    >
-      <p style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0;">
-        <strong>Welcome! Start by creating your own Brand CVI (colours, fonts, logo or .pptx template) so every presentation matches your visual identity.</strong>
-      </p>
-      <button type="button" class="btn btn-primary" id="goto-brand-onboarding-btn" style="white-space:nowrap;">
-        Create Your Brand CVI →
-      </button>
-    </section>
+    <!-- Shown automatically when workspace has 0 Brand Kits -->
+    <div id="zero-brand-onboarding-banner" class="surface-card" style="display:none;margin-bottom:16px;flex-direction:row;align-items:center;justify-content:space-between;">
+      <div>
+        <strong style="font-size:14px;">Welcome — Start by creating your own Brand CVI</strong>
+        <p style="font-size:12.5px;color:var(--text-secondary);">Upload a PowerPoint template (<code>.pptx</code>), logo, or website URL so every presentation matches your visual identity.</p>
+      </div>
+      <button type="button" class="btn btn-primary" id="goto-brand-onboarding-btn">Create Your Brand CVI →</button>
+    </div>
 
     <div class="studio-workspace">
-      <!-- Left: Simple, Focused Prompt & Media Card -->
+      <!-- Left Sidebar: Clean 2-Tab Switcher (Compose New vs Edit Slide) -->
       <aside class="studio-sidebar">
-        <section class="surface-card" aria-label="Create presentation">
+        <div class="sidebar-mode-tabs" role="tablist">
+          <button type="button" class="sidebar-mode-btn active" data-sidebar-tab="compose">Compose Deck</button>
+          <button type="button" class="sidebar-mode-btn" data-sidebar-tab="inspector">Slide &amp; Check</button>
+        </div>
+
+        <!-- TAB A: COMPOSE NEW DECK -->
+        <section class="surface-card" id="sidebar-pane-compose" aria-label="Compose presentation">
           <div class="card-heading">
-            <div>
-              <h1 class="card-title">New Presentation</h1>
-              <p class="card-subtitle">Describe your talk and attach screenshots or video.</p>
-            </div>
+            <span class="card-title">Brief &amp; Evidence</span>
             <span class="badge badge-pass" id="studio-brand-badge">Select Brand CVI</span>
           </div>
 
-          <!-- Hidden select synced with header brand selector for compatibility -->
           <select id="studio-brand-select" style="display:none;"></select>
 
           <div class="field-group">
-            <div class="field-label">
-              <span>Quick examples</span>
-              <button type="button" class="suggestion-pill highlight" id="load-full-sample-btn">✨ Load Demo + Screenshots + Video</button>
-            </div>
-            <div class="pill-row">
-              <button type="button" class="suggestion-pill" data-starter="postmortem">March Outage Review</button>
-              <button type="button" class="suggestion-pill" data-starter="demo">Product Demo</button>
-              <button type="button" class="suggestion-pill" data-starter="status">Quarterly Status</button>
-              <button type="button" class="suggestion-pill" data-starter="howitworks">How It Works</button>
-            </div>
-          </div>
-
-          <div class="field-group">
             <label class="field-label" for="brief-topic">
-              <span>What is your presentation about?</span>
-              <span style="font-weight:400;color:var(--text-muted);font-size:11.5px;">Draft saved</span>
+              <span>Topic &amp; key facts</span>
+              <button type="button" class="suggestion-pill highlight" id="load-full-sample-btn" style="padding:2px 8px;font-size:11px;">Load Demo + Media</button>
             </label>
-            <textarea id="brief-topic" class="ui-textarea" placeholder="Write a short brief or paste your raw notes..."></textarea>
+            <textarea id="brief-topic" class="ui-textarea" placeholder="Describe your presentation topic, audience, and key facts..."></textarea>
+            <div class="pill-row" style="margin-top:2px;">
+              <button type="button" class="suggestion-pill" data-starter="postmortem">Outage Review</button>
+              <button type="button" class="suggestion-pill" data-starter="demo">Product Demo</button>
+              <button type="button" class="suggestion-pill" data-starter="status">Q3 Status</button>
+              <button type="button" class="suggestion-pill" data-starter="howitworks">Architecture</button>
+            </div>
           </div>
 
           <div class="field-row">
             <div class="field-group">
               <label class="field-label" for="brief-audience">Audience</label>
               <select id="brief-audience" class="ui-select">
-                <option value="management">Management &amp; Execs</option>
-                <option value="product">Product &amp; Design</option>
-                <option value="developers">Engineering &amp; Dev</option>
-                <option value="mixed">Mixed Audience</option>
+                <option value="management">Management</option>
+                <option value="product">Product</option>
+                <option value="developers">Engineering</option>
+                <option value="mixed">Mixed</option>
               </select>
             </div>
             <div class="field-group">
-              <label class="field-label" for="brief-length">Duration (min)</label>
+              <label class="field-label" for="brief-length">Minutes</label>
               <input type="number" id="brief-length" class="ui-input" value="10" min="3" max="60" />
             </div>
           </div>
 
-          <!-- Media Upload Box -->
           <div class="field-group">
             <div class="field-label">
               <span>Screenshots &amp; Video</span>
-              <span id="media-count-badge" style="color:var(--text-muted);font-weight:500;">0 attached</span>
+              <span id="media-count-badge" style="color:var(--text-muted);">0 attached</span>
             </div>
             <div class="media-dropzone" id="media-dropzone" tabindex="0" role="button">
-              Drop images or video here, paste with <strong>⌘V</strong>, or <span style="text-decoration:underline;font-weight:600;">browse files</span>
+              Drop files, paste with <strong>⌘V</strong>, or <span style="text-decoration:underline;">browse</span>
               <input type="file" id="media-file-input" multiple accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.mp4,.webm,.mov" style="display:none;" />
             </div>
             <div class="media-tray-list" id="media-tray-list"></div>
           </div>
 
-          <!-- Progressive Disclosure for Optional Settings -->
-          <details style="font-size:13px;color:var(--text-secondary);">
-            <summary style="cursor:pointer;font-weight:600;padding:4px 0;">More options (language, live demo, source link)</summary>
-            <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle);">
+          <details style="font-size:12px;color:var(--text-secondary);">
+            <summary style="cursor:pointer;font-weight:500;">Options (language, slug, source)</summary>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-subtle);">
               <div class="field-row">
-                <div class="field-group">
-                  <label class="field-label" for="brief-language">Language</label>
-                  <select id="brief-language" class="ui-select">
-                    <option value="en">English</option>
-                    <option value="da">Danish</option>
-                    <option value="de">German</option>
-                  </select>
-                </div>
-                <div class="field-group">
-                  <label class="field-label" for="brief-slug">Deck URL slug</label>
-                  <input type="text" id="brief-slug" class="ui-input" placeholder="march-incident-review" />
-                </div>
+                <select id="brief-language" class="ui-select">
+                  <option value="en">English</option>
+                  <option value="da">Danish</option>
+                  <option value="de">German</option>
+                </select>
+                <input type="text" id="brief-slug" class="ui-input" placeholder="deck-slug" />
               </div>
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
                 <input type="checkbox" id="brief-demo-toggle" checked />
-                <span>Include a live demo / walkthrough slide</span>
+                <span>Include live demo slide</span>
               </label>
-              <input type="text" id="brief-source-url" class="ui-input" placeholder="Optional source link or document URL" />
+              <input type="text" id="brief-source-url" class="ui-input" placeholder="Optional source URL" />
             </div>
           </details>
 
-          <div style="display:flex;gap:10px;margin-top:4px;">
-            <button type="button" class="btn btn-primary" id="build-deck-btn" style="flex:1;padding:12px 18px;font-size:14.5px;">
-              Create Presentation
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-primary" id="build-deck-btn" style="flex:1;padding:10px 14px;">
+              Generate Presentation
             </button>
-            <button type="button" class="btn" id="stop-job-btn" style="display:none;">
-              Stop
-            </button>
+            <button type="button" class="btn" id="stop-job-btn" style="display:none;">Stop</button>
           </div>
         </section>
-      </aside>
 
-      <!-- Right: Presentation Stage, Filmstrip & Simple AI Edit Bar -->
-      <section class="studio-stage-column">
-        <!-- Clean Top Stage Toolbar -->
-        <div class="stage-toolbar">
-          <div class="stage-deck-info">
-            <h2 class="stage-deck-title" id="viewer-deck-title">Presentation Preview</h2>
-            <span class="badge badge-pass" id="viewer-check-badge">✓ On-Brand &amp; Verified</span>
-          </div>
-
-          <div class="stage-actions">
-            <button type="button" class="btn btn-sm" id="viewer-prev-btn">← Prev</button>
-            <button type="button" class="btn btn-sm" id="viewer-next-btn">Next →</button>
-            <button type="button" class="btn btn-sm btn-dark" id="viewer-present-btn">Present Fullscreen</button>
-            <button type="button" class="btn btn-sm" id="viewer-presenter-btn">Presenter View</button>
-            <a class="btn btn-sm" id="viewer-export-zip" href="#" download>Export ZIP</a>
-            <a class="btn btn-sm" id="viewer-export-pdf" href="#" download>Export PDF</a>
-          </div>
-        </div>
-
-        <!-- Framed 16:9 Stage -->
-        <div class="stage-canvas-wrapper">
-          <div class="preview-frame-wrap">
-            <iframe id="studio-preview-iframe" class="preview-iframe" title="Interactive Deck Preview"></iframe>
-          </div>
-        </div>
-
-        <!-- Clickable Slide Filmstrip -->
-        <div class="slide-filmstrip" id="studio-slide-filmstrip" aria-label="Slide navigation strip"></div>
-
-        <!-- Inline Slide Inspector -->
-        <details class="inspector-drawer" id="slide-inspector-drawer" open>
-          <summary>
-            <span style="display:flex;align-items:center;gap:10px;">
-              <span>Slide Inspector — Edit Selected Slide Directly</span>
-              <span id="inspector-slide-badge" class="badge badge-pass">Slide 01</span>
-            </span>
-            <span style="font-size:12px;color:var(--text-muted);">Edit slide fields directly ▾</span>
-          </summary>
-          <div class="slide-inspector-form">
-            <div class="slide-inspector-grid">
+        <!-- TAB B: SLIDE INSPECTOR & BRAND VERIFICATION (Cleanly tucked in tab 2) -->
+        <section class="surface-card" id="sidebar-pane-inspector" style="display:none;" aria-label="Slide inspector">
+          <div id="slide-inspector-drawer">
+            <div class="card-heading" style="margin-bottom:10px;">
+              <span class="card-title">Edit Active Slide</span>
+              <button type="button" class="btn btn-sm btn-primary" id="save-slide-inspector-btn">Save Slide</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
               <div class="field-group">
-                <label class="field-label" for="inspector-slide-type">Slide Type</label>
+                <label class="field-label" for="inspector-slide-type">Slide Layout</label>
                 <select id="inspector-slide-type" class="ui-select">
                   <option value="cover">cover</option>
                   <option value="content">content</option>
@@ -213,105 +164,102 @@
                 </select>
               </div>
               <div class="field-group">
-                <label class="field-label" for="inspector-slide-title">Title</label>
+                <label class="field-label" for="inspector-slide-title">Headline</label>
                 <input type="text" id="inspector-slide-title" class="ui-input" placeholder="Slide headline..." />
               </div>
-            </div>
-            <div class="field-group">
-              <label class="field-label" for="inspector-slide-lede">Lede / Subtitle</label>
-              <input type="text" id="inspector-slide-lede" class="ui-input" placeholder="Supporting summary line..." />
-            </div>
-            <div class="field-group">
-              <label class="field-label" for="inspector-slide-notes">Speaker Notes</label>
-              <input type="text" id="inspector-slide-notes" class="ui-input" placeholder="Presenter notes for this slide..." />
-            </div>
-            <div style="display:flex;justify-content:flex-end;">
-              <button type="button" class="btn btn-sm btn-primary" id="save-slide-inspector-btn">Save Slide</button>
+              <div class="field-group">
+                <label class="field-label" for="inspector-slide-lede">Subtitle / Lede</label>
+                <input type="text" id="inspector-slide-lede" class="ui-input" placeholder="Supporting sentence..." />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="inspector-slide-notes">Speaker Notes</label>
+                <input type="text" id="inspector-slide-notes" class="ui-input" placeholder="Notes for presenter view..." />
+              </div>
             </div>
           </div>
-        </details>
 
-        <!-- Simple Conversational AI Refinement Bar -->
-        <div class="ai-refine-bar">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:13px;font-weight:600;color:var(--text-secondary);">Refine with AI:</span>
-              <button type="button" class="suggestion-pill" data-refine="make slide 4 simpler">Simplify slide 4</button>
-              <button type="button" class="suggestion-pill" data-refine="add a timeline of the outage">Add outage timeline</button>
-              <button type="button" class="suggestion-pill" data-refine="use the second screenshot on the cover">Put 2nd screenshot on cover</button>
+          <div style="border-top:1px solid var(--border-subtle);padding-top:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="field-label">Quality Check</span>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <span id="check-summary-badge" class="badge badge-pass">Verified</span>
+                <span id="agent-phase-badge" class="badge badge-pass" style="display:none;">Ready</span>
+                <button type="button" class="btn btn-sm" id="viewer-check-btn">Re-check</button>
+              </div>
             </div>
-            <button type="button" class="btn btn-sm btn-ghost" id="undo-deck-btn" title="Revert last change">↺ Undo last edit</button>
+            <div class="activity-list" id="check-slides-list"></div>
+            <div class="activity-list" id="agent-activity-list" style="display:none;"></div>
           </div>
-          <div class="ai-refine-input-row">
-            <input type="text" id="refine-prompt-input" class="ui-input" placeholder="Ask AI to change a slide (e.g. 'Make slide 4 simpler' or 'Add a timeline of the outage')..." />
-            <button type="button" class="btn btn-dark" id="apply-refine-btn" style="white-space:nowrap;">Update Deck</button>
+        </section>
+      </aside>
+
+      <!-- Right Stage Column: Minimal Toolbar + Serene 16:9 Stage Well + Single Floating Prompt Bar -->
+      <section class="studio-stage-column">
+        <div class="stage-toolbar">
+          <div class="stage-deck-info">
+            <h2 class="stage-deck-title" id="viewer-deck-title">Presentation</h2>
+            <span class="badge badge-pass" id="viewer-check-badge" style="cursor:pointer;" title="Click to inspect slide verification">✓ On-Brand</span>
+          </div>
+
+          <div class="stage-actions">
+            <button type="button" class="btn btn-sm" id="viewer-prev-btn">←</button>
+            <button type="button" class="btn btn-sm" id="viewer-next-btn">→</button>
+            <button type="button" class="btn btn-sm btn-primary" id="viewer-present-btn">Present</button>
+            <button type="button" class="btn btn-sm" id="viewer-presenter-btn">Presenter View</button>
+            <a class="btn btn-sm" id="viewer-export-zip" href="#" download>ZIP</a>
+            <a class="btn btn-sm" id="viewer-export-pdf" href="#" download>PDF</a>
           </div>
         </div>
 
-        <!-- Calm, Collapsible Verification & Activity Drawer (Out of the way unless opened) -->
-        <details class="inspector-drawer">
-          <summary>
-            <span style="display:flex;align-items:center;gap:10px;">
-              <span>Brand &amp; Layout Verification Details</span>
-              <span id="check-summary-badge" class="badge badge-pass">All slides passed</span>
-              <span id="agent-phase-badge" class="badge badge-pass" style="display:none;">Ready</span>
-            </span>
-            <span style="font-size:12px;color:var(--text-muted);">Click to inspect slide checks &amp; build log ▾</span>
-          </summary>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);">
-            <div>
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <strong style="font-size:13px;">Slide-by-Slide Check (WCAG AA, Overflow, Palette)</strong>
-                <button type="button" class="btn btn-sm" id="viewer-check-btn">Re-run Check</button>
-              </div>
-              <div class="activity-list" id="check-slides-list"></div>
-            </div>
-            <div>
-              <strong style="font-size:13px;">AI Build Steps</strong>
-              <div class="activity-list" id="agent-activity-list">
-                <div class="activity-step">
-                  <span>All slides verified against Brand Kit tokens and geometry.</span>
-                  <span>Ready</span>
-                </div>
-              </div>
-            </div>
+        <!-- Serene Gallery Stage Well with Compact Numbered Slide Strip -->
+        <div class="stage-canvas-wrapper">
+          <div class="preview-frame-wrap">
+            <iframe id="studio-preview-iframe" class="preview-iframe" title="Interactive Deck Preview"></iframe>
           </div>
-        </details>
+          <div class="slide-filmstrip" id="studio-slide-filmstrip" aria-label="Slide strip"></div>
+        </div>
+
+        <!-- Single Floating AI Command Bar -->
+        <div class="ai-refine-bar">
+          <div class="ai-refine-input-row">
+            <input type="text" id="refine-prompt-input" class="ui-input" placeholder="Ask AI to refine this deck (e.g. 'Make slide 4 simpler' or 'Add outage timeline')..." style="border:none;background:transparent;padding:6px 8px;" />
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="suggestion-pill" data-refine="make slide 4 simpler">Simplify slide 4</button>
+            <button type="button" class="suggestion-pill" data-refine="add a timeline of the outage">Add timeline</button>
+            <button type="button" class="suggestion-pill" data-refine="use the second screenshot on the cover">Cover screenshot</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="undo-deck-btn" title="Undo last edit">↺ Undo</button>
+            <button type="button" class="btn btn-sm btn-primary" id="apply-refine-btn">Apply</button>
+          </div>
+        </div>
       </section>
     </div>
   </main>
 
   <!-- ========================================================================
-       2. BRAND KIT SETUP (Visual Styleguide & Template Importer)
+       2. BRAND CVI SETUP (Minimalist Styleguide & Onboarding)
        ======================================================================== -->
   <main id="view-brand" class="view-panel">
-    <!-- Top Strip: Your Brand Kits -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <div>
-        <h1 style="font-family:var(--font-display);font-size:26px;font-weight:600;">Your Brand Kits</h1>
-        <p style="color:var(--text-secondary);font-size:14px;">Upload a PowerPoint template (<code>.pptx</code>, <code>.thmx</code>), logo, and colours once — every presentation stays on-brand automatically.</p>
+        <h1 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;">Brand CVI Profiles</h1>
+        <p style="color:var(--text-secondary);font-size:13px;">Create your own visual identity from a PowerPoint template, website URL, or colour palette.</p>
       </div>
-      <span class="badge badge-pass" id="brand-quota-badge">2 of 4 Brands Used</span>
+      <span class="badge badge-pass" id="brand-quota-badge">2 of 4 Brands</span>
     </div>
 
     <div class="brand-cards-strip" id="brand-profiles-strip"></div>
 
-    <div style="display:grid;grid-template-columns:440px 1fr;gap:28px;align-items:start;">
-      <!-- Left: Edit Active Brand or Add New Brand -->
-      <div style="display:flex;flex-direction:column;gap:20px;">
+    <div style="display:grid;grid-template-columns:390px minmax(0,1fr);gap:24px;align-items:start;">
+      <!-- Left: Active CVI Tokens + New CVI Creator -->
+      <div style="display:flex;flex-direction:column;gap:16px;">
         <section class="surface-card">
           <div class="card-heading">
-            <div>
-              <h2 class="card-title" id="active-brand-editor-title">Active Brand CVI</h2>
-              <p class="card-subtitle">Click any colour swatch or typography setting to customize.</p>
-            </div>
+            <span class="card-title" id="active-brand-editor-title">Active Brand CVI</span>
             <span class="badge badge-pass" id="active-brand-version-badge">v1</span>
           </div>
 
-          <div class="field-group">
-            <span class="field-label">Brand Colours</span>
-            <div class="swatch-grid" id="brand-color-swatches"></div>
-          </div>
+          <div class="swatch-grid" id="brand-color-swatches"></div>
 
           <div class="field-row">
             <div class="field-group">
@@ -319,7 +267,7 @@
               <input type="text" id="brand-font-title" class="ui-input" />
             </div>
             <div class="field-group">
-              <label class="field-label" for="brand-font-fallback">Fallback Font</label>
+              <label class="field-label" for="brand-font-fallback">Fallback</label>
               <select id="brand-font-fallback" class="ui-select">
                 <option value="Instrument Serif">Instrument Serif</option>
                 <option value="Fraunces">Fraunces</option>
@@ -330,11 +278,11 @@
             </div>
           </div>
 
-          <div id="brand-font-warning-box" style="display:none;padding:12px;border-radius:8px;background:var(--caution-soft);color:var(--caution);font-size:13px;"></div>
+          <div id="brand-font-warning-box" style="display:none;padding:10px;border-radius:6px;background:var(--caution-soft);color:var(--caution);font-size:12px;"></div>
 
           <div class="field-row">
             <div class="field-group">
-              <label class="field-label" for="brand-logo-placement">Logo Position (Cover &amp; End)</label>
+              <label class="field-label" for="brand-logo-placement">Logo Position</label>
               <select id="brand-logo-placement" class="ui-select">
                 <option value="top-right">Top Right</option>
                 <option value="top-left">Top Left</option>
@@ -343,7 +291,7 @@
               </select>
             </div>
             <div class="field-group">
-              <label class="field-label" for="brand-classification">Footer Label</label>
+              <label class="field-label" for="brand-classification">Footer Tag</label>
               <select id="brand-classification" class="ui-select">
                 <option value="Internal">Internal</option>
                 <option value="Public">Public</option>
@@ -352,69 +300,57 @@
             </div>
           </div>
 
-          <button type="button" class="btn btn-primary" id="save-brand-version-btn">
-            Save Brand Changes
-          </button>
+          <button type="button" class="btn btn-primary" id="save-brand-version-btn">Save Brand Tokens</button>
         </section>
 
-        <!-- Import New Brand Kit Card -->
         <section class="surface-card">
-          <div>
-            <h2 class="card-title">Add Another Brand Kit</h2>
-            <p class="card-subtitle">Import from a PowerPoint file (<code>.pptx</code>, <code>.potx</code>, <code>.thmx</code>) or guidelines.</p>
+          <div class="card-heading">
+            <span class="card-title">Create New Brand CVI</span>
+            <span id="brand-wizard-steps" style="font-size:11px;color:var(--text-muted);">1. Source → 2. Tokens → 3. Save</span>
           </div>
-          <div class="wizard-steps-bar" id="brand-wizard-steps" aria-label="Brand onboarding steps">
-            <span class="wizard-step-pill active" data-wizard-step="1">Step 1: Source (.pptx or URL)</span>
-            <span class="wizard-step-pill" data-wizard-step="2">Step 2: Extract Signals</span>
-            <span class="wizard-step-pill" data-wizard-step="3">Step 3: Create Brand</span>
-          </div>
+
           <div class="field-group">
             <label class="field-label" for="new-brand-name">Brand Name</label>
-            <input type="text" id="new-brand-name" class="ui-input" placeholder="Enter your brand or company name (e.g. Acme Studio)..." value="" />
+            <input type="text" id="new-brand-name" class="ui-input" placeholder="Enter your brand name (e.g. Acme Studio)..." value="" />
           </div>
+
           <div class="field-group">
-            <label class="field-label" for="new-brand-file">Upload PowerPoint Theme (.pptx, .potx, .thmx)</label>
+            <label class="field-label" for="new-brand-file">PowerPoint Theme (.pptx, .potx, .thmx)</label>
             <input type="file" id="new-brand-file" class="ui-input" accept=".pptx,.potx,.thmx" />
           </div>
+
           <div class="field-group">
-            <label class="field-label" for="new-brand-url">Website or Brand Guidelines URL</label>
-            <div style="display:flex;gap:8px;">
-              <input type="url" id="new-brand-url" class="ui-input" placeholder="https://example.com/brand-guidelines" />
-              <button type="button" class="btn btn-sm" id="crawl-brand-url-btn" style="white-space:nowrap;">Auto-Extract from URL/Text</button>
+            <label class="field-label" for="new-brand-url">Or extract from website URL</label>
+            <div style="display:flex;gap:6px;">
+              <input type="url" id="new-brand-url" class="ui-input" placeholder="https://your-company.com" />
+              <button type="button" class="btn btn-sm" id="crawl-brand-url-btn">Extract</button>
             </div>
           </div>
-          <div class="field-group">
-            <label class="field-label" for="new-brand-sample">Or pick a ready-made template</label>
-            <select id="new-brand-sample" class="ui-select"></select>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="new-brand-guidelines">Optional brand notes or hex colours</label>
-            <textarea id="new-brand-guidelines" class="ui-textarea" style="min-height:64px;" placeholder="e.g. Primary #1E293B, Accent #B83214, clean Nordic layout..."></textarea>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="upload-font-input">Optional custom font (.woff2, .ttf)</label>
-            <div style="display:flex;gap:8px;">
-              <input type="file" id="upload-font-input" class="ui-input" accept=".woff2,.woff,.ttf,.otf" />
-              <button type="button" class="btn" id="upload-font-btn">Upload</button>
+
+          <details style="font-size:12px;color:var(--text-secondary);">
+            <summary style="cursor:pointer;font-weight:500;">Sample templates, custom fonts &amp; hex notes</summary>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-subtle);">
+              <select id="new-brand-sample" class="ui-select"></select>
+              <textarea id="new-brand-guidelines" class="ui-textarea" style="min-height:56px;" placeholder="Optional hex colours or brand rules..."></textarea>
+              <div style="display:flex;gap:6px;">
+                <input type="file" id="upload-font-input" class="ui-input" accept=".woff2,.woff,.ttf,.otf" />
+                <button type="button" class="btn btn-sm" id="upload-font-btn">Upload Font</button>
+              </div>
             </div>
-          </div>
-          <button type="button" class="btn btn-dark" id="create-brand-btn">
-            + Create Brand Kit
-          </button>
+          </details>
+
+          <button type="button" class="btn btn-primary" id="create-brand-btn">+ Create Brand CVI</button>
         </section>
       </div>
 
-      <!-- Right: Live Brand Preview & Contrast Summary -->
-      <div style="display:flex;flex-direction:column;gap:20px;">
+      <!-- Right: Live Brand Gallery & Collapsible WCAG/Geometry Table -->
+      <div style="display:flex;flex-direction:column;gap:14px;">
         <section class="surface-card">
           <div class="card-heading">
-            <div>
-              <h2 class="card-title">Live Brand Preview</h2>
-              <p class="card-subtitle">See how every slide layout, chart, timeline, and card looks in this brand.</p>
-            </div>
-            <button type="button" class="btn btn-sm" id="run-gallery-check-btn">✓ Verify Brand Compliance</button>
+            <span class="card-title">Live Brand Preview Gallery</span>
+            <button type="button" class="btn btn-sm" id="run-gallery-check-btn">✓ Verify WCAG &amp; Layout</button>
           </div>
-          <div class="stage-canvas-wrapper" style="padding:14px;">
+          <div class="stage-canvas-wrapper" style="padding:16px;">
             <div class="preview-frame-wrap">
               <iframe id="brand-gallery-iframe" class="preview-iframe" title="Brand Kit Live Preview Gallery"></iframe>
             </div>
@@ -423,31 +359,22 @@
 
         <details class="inspector-drawer">
           <summary>
-            <span style="display:flex;align-items:center;gap:10px;">
-              <span>Accessibility Contrast (WCAG AA) &amp; Template Measurements</span>
-              <span class="badge badge-pass" id="brand-contrast-badge">WCAG AA Verified</span>
+            <span style="display:flex;align-items:center;gap:8px;">
+              <span>WCAG AA Contrast Matrix &amp; Template Geometry</span>
+              <span class="badge badge-pass" id="brand-contrast-badge">WCAG AA Pass</span>
             </span>
-            <span style="font-size:12px;color:var(--text-muted);">Expand details ▾</span>
+            <span style="font-size:11.5px;color:var(--text-muted);">Show table ▾</span>
           </summary>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-subtle);">
             <table class="ui-table">
               <thead>
-                <tr>
-                  <th>Role Pair</th>
-                  <th>Colours</th>
-                  <th>Contrast</th>
-                  <th>Status</th>
-                </tr>
+                <tr><th>Pair</th><th>Colours</th><th>Ratio</th><th>Status</th></tr>
               </thead>
               <tbody id="brand-contrast-tbody"></tbody>
             </table>
             <table class="ui-table">
               <thead>
-                <tr>
-                  <th>Layout Element</th>
-                  <th>Template Inches</th>
-                  <th>Stage Pixels (1600×900)</th>
-                </tr>
+                <tr><th>Region</th><th>Inches</th><th>Stage Pixels</th></tr>
               </thead>
               <tbody id="brand-geometry-tbody"></tbody>
             </table>
@@ -458,36 +385,36 @@
   </main>
 
   <!-- ========================================================================
-       3. MY DECKS (LIBRARY)
+       3. LIBRARY (All Presentations)
        ======================================================================== -->
   <main id="view-library" class="view-panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
       <div>
-        <h1 style="font-family:var(--font-display);font-size:26px;font-weight:600;">My Decks</h1>
-        <p style="color:var(--text-secondary);font-size:14px;">All your generated presentations, ready to present full screen or export offline.</p>
+        <h1 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;">Presentation Library</h1>
+        <p style="color:var(--text-secondary);font-size:13px;">Open any deck in the Studio, present live, or export offline bundles.</p>
       </div>
-      <input type="search" id="library-search-input" class="ui-input" placeholder="Search presentations..." style="width:300px;background:var(--bg-surface);" />
+      <input type="search" id="library-search-input" class="ui-input" placeholder="Search decks..." style="width:260px;background:var(--bg-surface);" />
     </div>
     <div class="deck-grid" id="library-deck-grid"></div>
   </main>
 
   <!-- ========================================================================
-       4. SLIDE GALLERY (COMPONENT FIXTURE)
+       4. GALLERY (Full Component Fixture)
        ======================================================================== -->
   <main id="view-gallery" class="view-panel">
     <div class="surface-card">
       <div class="card-heading">
         <div>
-          <h1 class="card-title">Slide &amp; Component Gallery</h1>
-          <p class="card-subtitle">Interactive showcase of all 8 slide types and 15+ building blocks rendered in your active brand.</p>
+          <span class="card-title">Component &amp; Slide Type Gallery</span>
+          <p class="card-subtitle">All 8 slide layouts and 15+ tokenised components rendered in your active Brand CVI.</p>
         </div>
         <div style="display:flex;gap:8px;">
-          <button type="button" class="btn btn-sm btn-dark" id="gallery-fullscreen-btn">Open Fullscreen</button>
-          <a class="btn btn-sm" href="/api/gallery/preview" target="_blank">Open in New Tab ↗</a>
+          <button type="button" class="btn btn-sm btn-primary" id="gallery-fullscreen-btn">Present Fullscreen</button>
+          <a class="btn btn-sm" href="/api/gallery/preview" target="_blank">New Tab ↗</a>
         </div>
       </div>
       <div class="stage-canvas-wrapper">
-        <div class="preview-frame-wrap" style="max-width:1280px;margin:0 auto;">
+        <div class="preview-frame-wrap" style="max-width:1180px;">
           <iframe id="full-gallery-iframe" class="preview-iframe" title="Full Component Gallery"></iframe>
         </div>
       </div>
@@ -495,37 +422,24 @@
   </main>
 
   <!-- ========================================================================
-       5. PLAN, QUOTAS (2/4/16 Brands · 4/20/100 Daily Decks) & SETTINGS
+       5. WORKSPACE, PLANS & QUOTAS (2/4/16 Brands · 4/20/100 Daily Decks)
        ======================================================================== -->
   <main id="view-saas" class="view-panel">
-    <div style="margin-bottom:22px;">
-      <h1 style="font-family:var(--font-display);font-size:26px;font-weight:600;">Subscription Plan, Quotas &amp; Cost Analytics</h1>
-      <p style="color:var(--text-secondary);font-size:14px;">Manage your workspace plan, adjust brand and daily presentation quotas, and track unit economics.</p>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1.15fr 0.85fr;gap:24px;align-items:start;">
-      <!-- Left: Plan Cards & Quota Tuning -->
-      <div style="display:flex;flex-direction:column;gap:20px;">
+    <div style="display:grid;grid-template-columns:1.1fr 0.9fr;gap:22px;align-items:start;">
+      <div style="display:flex;flex-direction:column;gap:16px;">
         <section class="surface-card">
           <div class="card-heading">
-            <h2 class="card-title">Workspace Plan</h2>
+            <span class="card-title">Subscription Plan &amp; Quotas</span>
             <span class="badge badge-pass" id="saas-active-tier-badge">Pro Plan</span>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;" id="plan-cards-container"></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;" id="plan-cards-container"></div>
         </section>
 
         <section class="surface-card">
-          <div>
-            <h2 class="card-title">Quota Configuration (2 / 4 / 16 Brands · 4 / 20 / 100 Daily Decks)</h2>
-            <p class="card-subtitle">Adjust tier limits dynamically to experiment with pricing and daily usage caps.</p>
-          </div>
+          <span class="card-title">Dynamic Quota Limits (2 / 4 / 16 CVI · 4 / 20 / 100 Daily Decks)</span>
           <table class="ui-table">
             <thead>
-              <tr>
-                <th>Plan Tier</th>
-                <th>Max Brand Kits</th>
-                <th>Daily Presentations</th>
-              </tr>
+              <tr><th>Tier</th><th>Max Brand CVIs</th><th>Daily Presentations</th></tr>
             </thead>
             <tbody>
               <tr>
@@ -545,43 +459,30 @@
               </tr>
             </tbody>
           </table>
-          <div style="display:flex;gap:10px;">
+          <div style="display:flex;gap:8px;">
             <button type="button" class="btn btn-primary" id="save-quotas-btn">Save Quota Limits</button>
             <button type="button" class="btn" id="reset-today-usage-btn">Reset Today's Counter</button>
           </div>
         </section>
       </div>
 
-      <!-- Right: Cost per Presentation & AI Provider Settings -->
-      <div style="display:flex;flex-direction:column;gap:20px;">
+      <div style="display:flex;flex-direction:column;gap:16px;">
         <section class="surface-card">
           <div class="card-heading">
-            <div>
-              <h2 class="card-title">Unit Economics &amp; Cost per Deck</h2>
-              <p class="card-subtitle">Real-time token and Chromium render cost tracking for pricing decisions.</p>
-            </div>
+            <span class="card-title">Unit Economics &amp; Cost Telemetry</span>
             <a class="btn btn-sm" href="/api/subscription/cost-export.csv" download>⬇ Export Cost CSV</a>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;" id="cost-summary-cards"></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;" id="cost-summary-cards"></div>
           <table class="ui-table">
             <thead>
-              <tr>
-                <th>Presentation</th>
-                <th>Action</th>
-                <th>Tokens</th>
-                <th>Duration</th>
-                <th>Est. Cost</th>
-              </tr>
+              <tr><th>Deck</th><th>Action</th><th>Tokens</th><th>Time</th><th>Cost</th></tr>
             </thead>
             <tbody id="cost-history-tbody"></tbody>
           </table>
         </section>
 
         <section class="surface-card">
-          <div>
-            <h2 class="card-title">AI Provider &amp; Privacy Settings</h2>
-            <p class="card-subtitle">Configure which LLM provider powers your organisation.</p>
-          </div>
+          <span class="card-title">AI Provider &amp; Privacy</span>
           <div class="field-row">
             <div class="field-group">
               <label class="field-label" for="ent-llm-provider">AI Provider</label>
@@ -591,11 +492,11 @@
                 <option value="azure">Azure OpenAI</option>
                 <option value="anthropic">Anthropic Claude</option>
                 <option value="gemini">Google Gemini</option>
-                <option value="internal-gateway">Internal Company Gateway</option>
+                <option value="internal-gateway">Internal Gateway</option>
               </select>
             </div>
             <div class="field-group">
-              <label class="field-label" for="ent-role-select">Workspace Role</label>
+              <label class="field-label" for="ent-role-select">Role</label>
               <select id="ent-role-select" class="ui-select">
                 <option value="brand_admin">Brand Admin</option>
                 <option value="editor">Editor</option>
@@ -603,21 +504,19 @@
               </select>
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--text-secondary);">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-              <input type="checkbox" id="ent-internal-net" checked />
-              <span>Keep all data and AI traffic inside company network</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-              <input type="checkbox" id="ent-forbid-media" />
-              <span>Never send raw images/video to external LLMs (use captions only)</span>
-            </label>
-          </div>
-          <button type="button" class="btn btn-dark" id="save-ent-settings-btn">Save Settings</button>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-secondary);cursor:pointer;">
+            <input type="checkbox" id="ent-internal-net" checked />
+            <span>Keep all data and AI traffic inside company network</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-secondary);cursor:pointer;">
+            <input type="checkbox" id="ent-forbid-media" />
+            <span>Never send raw media binaries to external LLMs</span>
+          </label>
+          <button type="button" class="btn btn-primary" id="save-ent-settings-btn">Save Policy</button>
 
-          <details style="margin-top:6px;">
-            <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-muted);">View Workspace Activity Log ▾</summary>
-            <div class="activity-list" id="audit-log-list" style="max-height:180px;"></div>
+          <details>
+            <summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">Audit Log ▾</summary>
+            <div class="activity-list" id="audit-log-list"></div>
           </details>
         </section>
       </div>
@@ -625,25 +524,16 @@
   </main>
 
   <!-- Quota Upgrade Modal -->
-  <div class="modal-backdrop" id="quota-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="quota-upgrade-title" hidden>
+  <div class="modal-backdrop" id="quota-upgrade-modal" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="card-heading">
-        <div>
-          <h2 class="card-title" id="quota-upgrade-title">Workspace Quota Reached</h2>
-          <p class="card-subtitle" id="quota-upgrade-message">Upgrade your plan to unlock more Brand Kits and higher daily presentation limits.</p>
-        </div>
-        <button type="button" class="btn btn-sm btn-ghost" id="close-quota-modal-btn" aria-label="Close upgrade modal">✕</button>
+        <span class="card-title">Plan Limit Reached</span>
+        <button type="button" class="btn btn-sm btn-ghost" id="close-quota-modal-btn">✕</button>
       </div>
-      <div class="quota-upgrade-options">
-        <button type="button" class="btn btn-primary" data-upgrade-tier="pro" id="upgrade-pro-btn">
-          Pro (4 Brands · 20 Decks/day)
-        </button>
-        <button type="button" class="btn btn-dark" data-upgrade-tier="enterprise" id="upgrade-enterprise-btn">
-          Enterprise (16 Brands · 100 Decks/day)
-        </button>
-      </div>
-      <div style="display:flex;justify-content:flex-end;">
-        <button type="button" class="btn btn-sm btn-ghost" id="dismiss-quota-modal-btn">Cancel</button>
+      <p id="quota-modal-message" style="font-size:13px;color:var(--text-secondary);"></p>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="btn btn-primary" id="upgrade-pro-modal-btn" style="flex:1;">Switch to Pro (4 CVI · 20/day)</button>
+        <button type="button" class="btn" id="upgrade-ent-modal-btn" style="flex:1;">Enterprise (16 CVI · 100/day)</button>
       </div>
     </div>
   </div>
