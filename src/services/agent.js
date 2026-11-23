@@ -214,7 +214,9 @@ export function synthesizeDeckFromFacts({ brief, facts, brandKit, mediaAssets })
     const shortContext = truncateAtWord(
       m.context
         .replace(m.rawString, '')
-        .replace(/\(\s*\)/g, '')
+        .replace(/\(\s+/g, '(')
+        .replace(/\s+\)/g, ')')
+        .replace(/\(\s*[,;:-]?\s*\)/g, '')
         .replace(/\s{2,}/g, ' ')
         .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, ''),
       46

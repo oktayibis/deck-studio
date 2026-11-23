@@ -72,6 +72,7 @@ To move fast while preserving `Gemini 4 Argon (High)` quota, all development wor
 | **#11** | Phase 5 (Responsive UI) | Tablet & Mobile Responsive Studio Layout (`1024px` / `768px`) & Touch Swipe / Dock Tap Gestures (`src/engine/deck-engine.js`) | `gemini-4-hydrogen-high` | `area:ui` | ✅ Done |
 | **#20** | Phase 5 (Rust Parity) | Complete React 19 SPA Endpoint Parity (`/api/brands/select`, `PUT/DELETE /api/brands/:id`, `/api/brands/crawl`, `/api/gallery/*`, `/api/org/settings`, `/api/media/*`) & Static Bundle Serving (`backend-rs/`) | `gemini-4-argon-high` | `area:engine`, `area:saas` | ✅ Done |
 | **#21** | Phase 5 (QA / ADLC) | Phase 5 Responsive UI, Touch Gestures & Rust Parity E2E Verification | `gemini-4-hydrogen-low` | `area:qa` | ✅ Done |
+| **#22** | Phase 5 (Live UX Polish) | Resolve 5 Live-Preview UX & Visual Polish Findings (Topbar No-Wrap, Dark Mode Contrast, Bar Chart Label Wrap, KPI Parentheses Spacing & Gallery Video Asset Route) | `gemini-4-argon-high` | `area:ui`, `area:engine` | ✅ Done |
 
 ---
 

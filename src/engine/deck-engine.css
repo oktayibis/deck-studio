@@ -743,7 +743,7 @@ body {
 
 .ds-bar-row {
   display: grid;
-  grid-template-columns: 220px 1fr 90px;
+  grid-template-columns: 220px 1fr minmax(112px, auto);
   align-items: center;
   gap: 16px;
 }
@@ -779,6 +779,7 @@ body {
   font-size: 15px;
   font-weight: 700;
   text-align: right;
+  white-space: nowrap;
   color: var(--brand-text-on-light);
 }
 

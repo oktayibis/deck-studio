@@ -336,7 +336,7 @@ export function buildBrandGalleryDeck(brandKit) {
           },
           right: {
             type: 'video',
-            src: 'assets/sample-demo.mp4',
+            src: '/api/media/sample-file/sample-demo.mp4',
             poster: posterDataUrl,
             title: 'failover-verification.mp4',
             caption: 'Recorded failover drill confirming zero dropped sessions.'

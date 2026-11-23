@@ -421,6 +421,17 @@ export function createApp() {
     }
   });
 
+  app.get('/api/gallery/assets/:filename', async (req, res, next) => {
+    try {
+      await ensureSampleMediaAssets();
+      const filePath = safeResolvePath(path.join(FIXTURES_DIR, 'media'), req.params.filename);
+      if (!fs.existsSync(filePath)) return res.status(404).end();
+      res.sendFile(filePath);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // --------------------------------------------------------------------------
   // 3. Media Upload & Sample Evidence Loader (§3.2)
   // --------------------------------------------------------------------------
