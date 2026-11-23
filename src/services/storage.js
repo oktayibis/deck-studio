@@ -836,9 +836,14 @@ export class StorageService {
     return presetOrgs.map(({ id, defaultName }) => {
       const state = this.loadOrgState(id);
       const quota = this.getQuotaStatus(id);
+      const rawName = state.org?.name;
+      const isGenericName =
+        !rawName ||
+        rawName === 'My Studio Workspace' ||
+        rawName === 'Nordic Grid Enterprise';
       return {
         id,
-        name: state.org?.name && state.org.name !== 'Nordic Grid Enterprise' ? state.org.name : defaultName,
+        name: isGenericName ? defaultName : rawName,
         tier: quota.tier,
         tierName: quota.tierName,
         usedBrands: quota.usedBrands,
