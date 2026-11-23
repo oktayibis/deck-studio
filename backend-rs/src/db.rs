@@ -538,6 +538,123 @@ impl Database {
         self.get_quota_status(org_id)
     }
 
+    /// Selects an existing Brand Kit as the active CVI for the organisation.
+    pub fn set_active_brand_kit(&self, org_id: &str, brand_kit_id: &str) -> Result<BrandKit, DbError> {
+        let mut org = self.ensure_organisation(org_id)?;
+        let kits = self.list_brand_kits(org_id)?;
+        let found = kits
+            .into_iter()
+            .find(|k| k.id == brand_kit_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!(
+                    "Brand Kit '{brand_kit_id}' not found in '{org_id}'"
+                ))
+            })?;
+        org.active_brand_kit_id = Some(found.id.clone());
+        self.upsert_organisation(&org)?;
+        Ok(found)
+    }
+
+    /// Updates an existing Brand Kit in place (creating a new version `v + 1`) and re-evaluates WCAG 2.1 AA contrast.
+    pub fn update_brand_kit(
+        &self,
+        org_id: &str,
+        kit_id: &str,
+        name: Option<&str>,
+        colors: Option<crate::models::BrandColors>,
+        major_font: Option<&str>,
+        minor_font: Option<&str>,
+    ) -> Result<BrandKit, DbError> {
+        let kits = self.list_brand_kits(org_id)?;
+        let mut current = kits
+            .into_iter()
+            .find(|k| k.id == kit_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!("Brand Kit '{kit_id}' not found in '{org_id}'"))
+            })?;
+
+        if let Some(n) = name.filter(|s| !s.trim().is_empty()) {
+            current.name = n.trim().to_string();
+        }
+        if let Some(c) = colors {
+            let (passed, checks) = crate::brand::evaluate_brand_contrast(&c);
+            current.colors = c;
+            current.wcag_aa_passed = passed;
+            current.contrast_checks = checks;
+        }
+        if let Some(maj) = major_font.filter(|s| !s.trim().is_empty()) {
+            current.major_font = maj.trim().to_string();
+        }
+        if let Some(min) = minor_font.filter(|s| !s.trim().is_empty()) {
+            current.minor_font = min.trim().to_string();
+        }
+        current.version = current.version.saturating_add(1);
+
+        let saved = self.save_brand_kit(&current)?;
+        let _ = self.append_audit_log(&AuditLog {
+            id: format!("audit-brand-update-{}-v{}", saved.id, saved.version),
+            org_id: org_id.to_string(),
+            action: "brand.updated".to_string(),
+            actor: "rust-engine".to_string(),
+            target: saved.id.clone(),
+            detail: format!("Updated Brand Kit '{}' to v{}", saved.name, saved.version),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        });
+        Ok(saved)
+    }
+
+    /// Deletes a specific Brand Kit from the organisation and updates `active_brand_kit_id`.
+    pub fn delete_brand_kit(
+        &self,
+        org_id: &str,
+        kit_id: &str,
+    ) -> Result<SubscriptionQuota, DbError> {
+        let mut org = self.ensure_organisation(org_id)?;
+        {
+            let conn = self
+                .conn
+                .lock()
+                .map_err(|e| DbError::Sqlite(e.to_string()))?;
+            conn.execute(
+                "DELETE FROM brand_kits WHERE org_id = ?1 AND id = ?2",
+                params![org_id, kit_id],
+            )?;
+        }
+        let remaining = self.list_brand_kits(org_id)?;
+        if org.active_brand_kit_id.as_deref() == Some(kit_id) {
+            org.active_brand_kit_id = remaining.first().map(|k| k.id.clone());
+            self.upsert_organisation(&org)?;
+        }
+        self.get_quota_status(org_id)
+    }
+
+    /// Updates organisation workspace name and RBAC role.
+    pub fn update_org_settings(
+        &self,
+        org_id: &str,
+        name: Option<&str>,
+        role: Option<&str>,
+    ) -> Result<Organisation, DbError> {
+        let mut org = self.ensure_organisation(org_id)?;
+        if let Some(n) = name.filter(|s| !s.trim().is_empty()) {
+            org.name = n.trim().to_string();
+        }
+        if let Some(r) = role.filter(|s| ["brand_admin", "editor", "viewer"].contains(&s.trim())) {
+            org.role = r.trim().to_string();
+        }
+        let saved = self.upsert_organisation(&org)?;
+        let _ = self.append_audit_log(&AuditLog {
+            id: format!("audit-org-settings-{}", org_id),
+            org_id: org_id.to_string(),
+            action: "org.settings_updated".to_string(),
+            actor: "rust-engine".to_string(),
+            target: org_id.to_string(),
+            detail: format!("Updated workspace settings (name='{}', role='{}')", saved.name, saved.role),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        });
+        Ok(saved)
+    }
+
     /// Updates a single slide's `type`, `eyebrow`, `title`, `lede`, and `speaker_notes` in SQLite.
     pub fn update_deck_slide(
         &self,

@@ -651,8 +651,81 @@
         }
       });
 
+      this.setupTouchGestures(isBottomZone);
+
       // Setup stage annotation & zoom interactions
       this.setupAnnotationEvents();
+    }
+
+    /**
+     * Enables horizontal swipe navigation and bottom-edge touch dock toggling on the stage.
+     */
+    setupTouchGestures(isBottomZone) {
+      if (!this.stage) return;
+
+      let touchStartX = null;
+      let touchStartY = null;
+      let touchStartTime = 0;
+
+      const resetTouch = () => {
+        touchStartX = null;
+        touchStartY = null;
+        touchStartTime = 0;
+      };
+
+      this.stage.addEventListener(
+        'touchstart',
+        (e) => {
+          if (e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            touchStartTime = Date.now();
+          } else {
+            resetTouch();
+          }
+        },
+        { passive: true }
+      );
+
+      this.stage.addEventListener('touchcancel', resetTouch, { passive: true });
+
+      this.stage.addEventListener(
+        'touchend',
+        (e) => {
+          if (e.changedTouches.length !== 1 || touchStartX === null || touchStartY === null) {
+            resetTouch();
+            return;
+          }
+
+          const endTouch = e.changedTouches[0];
+          const dx = endTouch.clientX - touchStartX;
+          const dy = endTouch.clientY - touchStartY;
+          const dt = Date.now() - touchStartTime;
+          resetTouch();
+
+          if (this.mode !== 'interactive' || this.activeTool || this.zoomed) return;
+
+          if (dt <= 750 && Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.35) {
+            if (dx < 0) {
+              this.nextStep();
+            } else {
+              this.prevStep();
+            }
+          } else if (
+            dt <= 450 &&
+            Math.abs(dx) < 16 &&
+            Math.abs(dy) < 16 &&
+            isBottomZone(endTouch.clientY)
+          ) {
+            if (this.dockOpen) {
+              this.closeDock('touch-tap');
+            } else {
+              this.openDock('touch-tap');
+            }
+          }
+        },
+        { passive: true }
+      );
     }
 
     openDock() {

@@ -46,7 +46,7 @@ To move fast while preserving `Gemini 4 Argon (High)` quota, all development wor
 
 | Issue | Phase | Title | Assigned Model Tier | Area | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **#11** | Phase 3 (UI Backlog) | Tablet & Mobile Responsive Studio Layout & Touch Gestures | `gemini-4-hydrogen-high` | `area:ui` | 📋 Open (Backlog) |
+| **#11** | Phase 3/5 (Responsive UI) | Tablet & Mobile Responsive Studio Layout & Touch Gestures | `gemini-4-hydrogen-high` | `area:ui` | ✅ Done |
 | **#12** | Phase 3 (Rust Compiler) | Native Rust Deck HTML Compiler, Story Synthesizer & Offline ZIP Exporter (`backend-rs/`) | `gemini-4-argon-high` | `area:rust`, `area:saas` | ✅ Done |
 | **#13** | Phase 3 (API) | Zero-Brand Onboarding Reset API (`POST /api/brands/clear`) & Live LLM Provider Connection Tester (`POST /api/org/llm-test`) | `gemini-4-hydrogen-medium` | `area:saas`, `area:api` | ✅ Done |
 | **#14** | Phase 3 (UI) | Zero-Brand CVI Onboarding Trigger & AI Provider Test Action in Workspace UI | `gemini-4-hydrogen-medium` | `area:ui` | ✅ Done |
@@ -63,11 +63,19 @@ To move fast while preserving `Gemini 4 Argon (High)` quota, all development wor
 | **#18** | Phase 4 (DevOps) | Containerised Cloud & On-Premises Deployment (`Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`) | `gemini-4-hydrogen-low` | `area:ops`, `area:saas` | ✅ Done |
 | **#19** | Phase 4 (QA / ADLC) | Phase 4 Full-Stack Verification (Vite Build + Node + Playwright + Rust Cargo Tests) | `gemini-4-hydrogen-medium` | `area:qa` | ✅ Done |
 
-*(Note: Issue **#11** Tablet & Mobile Responsive Studio Layout remains `📋 Open (Backlog)` for a future sprint.)*
+---
+
+## 6. Phase 5: Responsive Studio UX, Touch Gestures & 100% Rust SPA Endpoint Parity (GitHub Issues #11, #20–#21)
+
+| Issue | Phase | Title | Assigned Model Tier | Area | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **#11** | Phase 5 (Responsive UI) | Tablet & Mobile Responsive Studio Layout (`1024px` / `768px`) & Touch Swipe / Dock Tap Gestures (`src/engine/deck-engine.js`) | `gemini-4-hydrogen-high` | `area:ui` | ✅ Done |
+| **#20** | Phase 5 (Rust Parity) | Complete React 19 SPA Endpoint Parity (`/api/brands/select`, `PUT/DELETE /api/brands/:id`, `/api/brands/crawl`, `/api/gallery/*`, `/api/org/settings`, `/api/media/*`) & Static Bundle Serving (`backend-rs/`) | `gemini-4-argon-high` | `area:engine`, `area:saas` | ✅ Done |
+| **#21** | Phase 5 (QA / ADLC) | Phase 5 Responsive UI, Touch Gestures & Rust Parity E2E Verification | `gemini-4-hydrogen-low` | `area:qa` | ✅ Done |
 
 ---
 
-## 6. How to Run the ADLC Workflow
+## 7. How to Run the ADLC Workflow
 
 ```bash
 # 1. Check current GitHub Issues, PRs, and branch state

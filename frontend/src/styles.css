@@ -946,3 +946,85 @@ body {
 .toast-banner.show {
   display: block;
 }
+
+/* Tablet & Mobile Responsive Layout (Issue #11) */
+@media (max-width: 1024px) {
+  .studio-workspace {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .view-panel {
+    padding: 16px 18px 28px;
+  }
+
+  .stage-canvas-wrapper {
+    padding: 14px 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-topbar {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .app-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    justify-content: flex-start;
+  }
+
+  .app-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab {
+    flex-shrink: 0;
+    min-height: 36px;
+  }
+
+  .stage-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .stage-actions {
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .deck-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .slide-filmstrip {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+  }
+
+  .filmstrip-pill {
+    scroll-snap-align: start;
+    min-height: 36px;
+  }
+
+  .toast-banner {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    max-width: none;
+  }
+}
+

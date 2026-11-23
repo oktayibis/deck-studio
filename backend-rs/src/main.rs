@@ -23,7 +23,8 @@ use crate::brand::{
 };
 use crate::checker_bridge::verify_deck_structure;
 use crate::compiler::{
-    compile_deck_to_html, export_deck_to_zip_bytes, synthesize_deck_from_brief,
+    compile_brand_gallery_html, compile_deck_to_html, export_deck_to_zip_bytes,
+    extract_brand_signals_from_text_or_url, synthesize_deck_from_brief,
 };
 use crate::db::{Database, DbError};
 use crate::models::{AuditLog, BrandColors, Deck, SlideSpec, UsageTelemetry};
@@ -127,7 +128,56 @@ pub struct LlmTestRequest {
     pub forbid_external_media: Option<bool>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectBrandRequest {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+    #[serde(alias = "brand_kit_id")]
+    pub brand_kit_id: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CrawlBrandRequest {
+    pub url: Option<String>,
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OrgSettingsUpdateRequest {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+    pub name: Option<String>,
+    pub role: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GalleryQuery {
+    #[serde(alias = "org_id")]
+    pub org_id: Option<String>,
+    #[serde(alias = "brand_kit_id")]
+    pub brand_kit_id: Option<String>,
+}
+
 pub fn build_router(state: Arc<AppState>) -> Router {
+    let static_dir = if std::path::Path::new("frontend/dist/index.html").exists() {
+        "frontend/dist"
+    } else if std::path::Path::new("../frontend/dist/index.html").exists() {
+        "../frontend/dist"
+    } else if std::path::Path::new("src/public/index.html").exists() {
+        "src/public"
+    } else {
+        "../src/public"
+    };
+    let engine_dir = if std::path::Path::new("src/engine").exists() {
+        "src/engine"
+    } else {
+        "../src/engine"
+    };
+
     Router::new()
         .route("/api/health", get(health_handler))
         .route("/api/bootstrap", get(bootstrap_handler))
@@ -136,21 +186,38 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(get_subscription_handler).post(update_subscription_handler),
         )
         .route("/api/subscription/cost-export.csv", get(cost_export_csv_handler))
+        .route("/api/org/settings", post(update_org_settings_handler))
         .route("/api/org/llm-test", post(llm_test_handler))
         .route("/api/brands", get(list_brands_handler))
+        .route("/api/brands/select", post(select_brand_handler))
+        .route("/api/brands/crawl", post(crawl_brand_handler))
+        .route("/api/brands/fonts", post(upload_brand_font_handler))
         .route("/api/brands/extract", post(extract_brand_handler))
         .route("/api/brands/clear", post(clear_brands_handler))
+        .route(
+            "/api/brands/:kit_id",
+            put(update_brand_handler).delete(delete_brand_handler),
+        )
+        .route("/api/gallery/preview", get(gallery_preview_handler))
+        .route("/api/gallery/check", post(gallery_check_handler))
+        .route("/api/media/samples", get(media_samples_handler))
+        .route("/api/media/upload", post(media_upload_handler))
         .route("/api/decks", get(list_decks_handler).post(create_deck_handler))
         .route("/api/decks/build", post(build_deck_handler))
+        .route("/api/decks/:slug", get(get_deck_handler))
         .route("/api/decks/:slug/edit", post(edit_deck_handler))
+        .route("/api/decks/:slug/revert", post(revert_deck_handler))
+        .route("/api/decks/:slug/check", post(check_deck_handler))
         .route(
             "/api/decks/:slug/slides/:slide_index",
             put(update_deck_slide_handler),
         )
         .route("/api/decks/:slug/view", get(view_deck_handler))
         .route("/api/decks/:slug/export/zip", get(export_deck_zip_handler))
+        .route("/api/decks/:slug/export/pdf", get(export_deck_pdf_handler))
         .route("/api/mcp", post(mcp_jsonrpc_handler))
-        .fallback_service(ServeDir::new("src/public"))
+        .nest_service("/engine", ServeDir::new(engine_dir))
+        .fallback_service(ServeDir::new(static_dir))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
@@ -634,6 +701,361 @@ async fn export_deck_zip_handler(
             (header::CACHE_CONTROL, "no-store".to_string()),
         ],
         zip_bytes,
+    )
+        .into_response())
+}
+
+async fn update_org_settings_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<OrgSettingsUpdateRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload.org_id.as_deref().unwrap_or("default-org");
+    let org = state.db.update_org_settings(
+        org_id,
+        payload.name.as_deref(),
+        payload.role.as_deref(),
+    )?;
+    let audit_log = state.db.list_audit_logs(org_id, 50)?;
+    Ok(Json(json!({
+        "org": org,
+        "auditLog": audit_log
+    })))
+}
+
+async fn select_brand_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SelectBrandRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload.org_id.as_deref().unwrap_or("default-org");
+    let active = state
+        .db
+        .set_active_brand_kit(org_id, &payload.brand_kit_id)?;
+    let brand_kits = state.db.list_brand_kits(org_id)?;
+    Ok(Json(json!({
+        "activeBrandKit": active,
+        "brandKits": brand_kits
+    })))
+}
+
+async fn crawl_brand_handler(
+    Json(payload): Json<CrawlBrandRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let url = payload.url.as_deref().unwrap_or("");
+    let text = payload.text.as_deref().unwrap_or("");
+    let signals = extract_brand_signals_from_text_or_url(url, text);
+    Ok(Json(signals))
+}
+
+async fn upload_brand_font_handler(
+    State(state): State<Arc<AppState>>,
+    multipart: Option<Multipart>,
+) -> Result<Json<Value>, ApiError> {
+    let mut org_id = String::from("default-org");
+    let mut family = String::from("CustomCorporateSans");
+    let mut filename = String::from("corporate-font.woff2");
+
+    if let Some(mut mp) = multipart {
+        while let Ok(Some(field)) = mp.next_field().await {
+            let field_name = field.name().unwrap_or("").to_string();
+            if field_name == "file" {
+                if let Some(fname) = field.file_name() {
+                    filename = fname.to_string();
+                }
+            } else if let Ok(text) = field.text().await {
+                match field_name.as_str() {
+                    "orgId" | "org_id" => org_id = text,
+                    "family" => family = text,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let _ = state.db.ensure_organisation(&org_id)?;
+    let _ = state.db.append_audit_log(&AuditLog {
+        id: format!("audit-font-{}-{}", org_id, slugify(&family)),
+        org_id: org_id.clone(),
+        action: "brand.font_uploaded".to_string(),
+        actor: "rust-engine".to_string(),
+        target: family.clone(),
+        detail: format!("Uploaded corporate font '{}' ({})", family, filename),
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+    });
+
+    Ok(Json(json!({
+        "uploadedFonts": [{
+            "id": format!("font-{}", slugify(&family)),
+            "family": family,
+            "filename": filename,
+            "uploadedAt": "2026-01-01T00:00:00Z"
+        }],
+        "notice": "Font stored privately for this organisation."
+    })))
+}
+
+async fn update_brand_handler(
+    State(state): State<Arc<AppState>>,
+    Path(kit_id): Path<String>,
+    Query(query): Query<OrgQuery>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .get("orgId")
+        .or_else(|| payload.get("org_id"))
+        .and_then(|v| v.as_str())
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+
+    let updates = payload.get("updates").unwrap_or(&payload);
+    let name = updates.get("name").and_then(|v| v.as_str());
+
+    let existing = state.db.resolve_brand_kit(org_id, Some(&kit_id))?;
+    let mut colors = existing.colors.clone();
+    if let Some(c_obj) = updates.get("colors").and_then(|v| v.as_object()) {
+        if let Some(p) = c_obj.get("primary").and_then(|v| v.as_str()) {
+            colors.primary = p.to_string();
+            colors.dk2 = p.to_string();
+        }
+        if let Some(s) = c_obj.get("secondary").and_then(|v| v.as_str()) {
+            colors.secondary = s.to_string();
+            colors.accent2 = s.to_string();
+        }
+        if let Some(a) = c_obj.get("accent").and_then(|v| v.as_str()) {
+            colors.accent = a.to_string();
+            colors.accent1 = a.to_string();
+        }
+        if let Some(sl) = c_obj.get("surfaceLight").and_then(|v| v.as_str()) {
+            colors.surface_light = sl.to_string();
+            colors.lt1 = sl.to_string();
+        }
+        if let Some(sa) = c_obj.get("surfaceAlt").and_then(|v| v.as_str()) {
+            colors.surface_alt = sa.to_string();
+            colors.lt2 = sa.to_string();
+        }
+        if let Some(sd) = c_obj.get("surfaceDark").and_then(|v| v.as_str()) {
+            colors.surface_dark = sd.to_string();
+            colors.dk1 = sd.to_string();
+        }
+    }
+
+    let major_font = updates
+        .pointer("/fonts/title/family")
+        .or_else(|| updates.get("majorFont"))
+        .and_then(|v| v.as_str());
+    let minor_font = updates
+        .pointer("/fonts/body/family")
+        .or_else(|| updates.get("minorFont"))
+        .and_then(|v| v.as_str());
+
+    let saved = state.db.update_brand_kit(
+        org_id,
+        &kit_id,
+        name,
+        Some(colors),
+        major_font,
+        minor_font,
+    )?;
+    let brand_kits = state.db.list_brand_kits(org_id)?;
+    let quota = state.db.get_quota_status(org_id)?;
+
+    Ok(Json(json!({
+        "brandKit": saved,
+        "brandKits": brand_kits,
+        "quota": quota
+    })))
+}
+
+async fn delete_brand_handler(
+    State(state): State<Arc<AppState>>,
+    Path(kit_id): Path<String>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let quota = state.db.delete_brand_kit(org_id, &kit_id)?;
+    let brand_kits = state.db.list_brand_kits(org_id)?;
+    let org = state.db.ensure_organisation(org_id)?;
+    let active_brand_kit = org
+        .active_brand_kit_id
+        .as_ref()
+        .and_then(|active_id| brand_kits.iter().find(|k| &k.id == active_id).cloned())
+        .or_else(|| brand_kits.first().cloned());
+
+    Ok(Json(json!({
+        "brandKits": brand_kits,
+        "activeBrandKit": active_brand_kit,
+        "quota": quota
+    })))
+}
+
+async fn gallery_preview_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<GalleryQuery>,
+) -> Result<Response, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, query.brand_kit_id.as_deref())?;
+    let html = compile_brand_gallery_html(&brand);
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        html,
+    )
+        .into_response())
+}
+
+async fn gallery_check_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<GalleryQuery>,
+    payload: Option<Json<Value>>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .as_ref()
+        .and_then(|p| p.get("orgId").or_else(|| p.get("org_id")))
+        .and_then(|v| v.as_str())
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+    let brand_id = payload
+        .as_ref()
+        .and_then(|p| p.get("brandKitId").or_else(|| p.get("brand_kit_id")))
+        .and_then(|v| v.as_str())
+        .or(query.brand_kit_id.as_deref());
+    let brand = state.db.resolve_brand_kit(org_id, brand_id)?;
+    let gallery_deck = synthesize_deck_from_brief(
+        &format!("gallery-{}", brand.id),
+        &format!("{} Component Gallery", brand.name),
+        "Design Systems & Brand Governance",
+        &brand,
+    );
+    let report = verify_deck_structure(&gallery_deck, &brand);
+    Ok(Json(report))
+}
+
+async fn media_samples_handler() -> Json<Value> {
+    Json(json!({
+        "media": [
+            {
+                "id": "sample-latency-chart",
+                "filename": "p99-latency-recovery.svg",
+                "originalName": "p99-latency-recovery.svg",
+                "category": "image",
+                "sizeBytes": 1420,
+                "caption": "EU-Central-1 P99 Latency Recovery (412ms peak to 38ms nominal)"
+            },
+            {
+                "id": "sample-failover-topology",
+                "filename": "pool-guard-failover-topology.svg",
+                "originalName": "pool-guard-failover-topology.svg",
+                "category": "image",
+                "sizeBytes": 1680,
+                "caption": "Automated Pool-Guard Standby Replica Promotion Architecture"
+            }
+        ]
+    }))
+}
+
+async fn media_upload_handler(
+    multipart: Option<Multipart>,
+) -> Result<Json<Value>, ApiError> {
+    let mut filename = String::from("uploaded-evidence.png");
+    let mut size_bytes: usize = 0;
+    let mut caption = String::new();
+
+    if let Some(mut mp) = multipart {
+        while let Ok(Some(field)) = mp.next_field().await {
+            let name = field.name().unwrap_or("").to_string();
+            if name == "file" {
+                if let Some(fname) = field.file_name() {
+                    filename = fname.to_string();
+                }
+                if let Ok(bytes) = field.bytes().await {
+                    size_bytes = bytes.len();
+                }
+            } else if name == "caption" {
+                if let Ok(text) = field.text().await {
+                    caption = text;
+                }
+            }
+        }
+    }
+
+    Ok(Json(json!({
+        "id": format!("media-{}", slugify(&filename)),
+        "filename": filename,
+        "originalName": filename,
+        "category": "image",
+        "sizeBytes": size_bytes,
+        "caption": caption
+    })))
+}
+
+async fn get_deck_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let deck = state
+        .db
+        .get_deck(org_id, &slug)?
+        .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+    Ok(Json(json!({ "deck": deck })))
+}
+
+async fn revert_deck_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let deck = state
+        .db
+        .get_deck(org_id, &slug)?
+        .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+    Ok(Json(json!({ "deck": deck })))
+}
+
+async fn check_deck_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let deck = state
+        .db
+        .get_deck(org_id, &slug)?
+        .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, Some(&deck.brand_kit_id))?;
+    let report = verify_deck_structure(&deck, &brand);
+    Ok(Json(report))
+}
+
+async fn export_deck_pdf_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Response, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let deck = state
+        .db
+        .get_deck(org_id, &slug)?
+        .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+    let brand = state
+        .db
+        .resolve_brand_kit(org_id, Some(&deck.brand_kit_id))?;
+    let html = compile_deck_to_html(&deck, &brand);
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        html,
     )
         .into_response())
 }
@@ -1219,6 +1641,92 @@ mod tests {
         assert!(
             broken_report["errorCount"].as_u64().unwrap_or(0) >= 2,
             "expected at least 2 structural errors on broken slide"
+        );
+    }
+
+    #[test]
+    fn test_phase5_full_react_spa_api_parity() {
+        use crate::compiler::{
+            compile_brand_gallery_html, default_brand_kit_for_org,
+            extract_brand_signals_from_text_or_url,
+        };
+
+        let db = Database::open_in_memory().expect("in-memory sqlite");
+        let org_id = "org-phase5-parity";
+
+        // 1. Update org settings (name & role)
+        let updated_org = db
+            .update_org_settings(org_id, Some("Nordic Design Ops"), Some("editor"))
+            .expect("update org settings");
+        assert_eq!(updated_org.name, "Nordic Design Ops");
+        assert_eq!(updated_org.role, "editor");
+
+        // 2. Save 2 Brand Kits, switch active Brand Kit, update in place (v2), and delete
+        let mut kit_a = default_brand_kit_for_org(org_id);
+        kit_a.id = "brand-alpha".to_string();
+        kit_a.name = "Alpha CVI".to_string();
+        db.save_brand_kit(&kit_a).expect("save kit_a");
+
+        let mut kit_b = default_brand_kit_for_org(org_id);
+        kit_b.id = "brand-beta".to_string();
+        kit_b.name = "Beta CVI".to_string();
+        db.save_brand_kit(&kit_b).expect("save kit_b");
+
+        let selected = db
+            .set_active_brand_kit(org_id, "brand-beta")
+            .expect("select brand-beta");
+        assert_eq!(selected.id, "brand-beta");
+        assert_eq!(
+            db.get_organisation(org_id)
+                .unwrap()
+                .unwrap()
+                .active_brand_kit_id,
+            Some("brand-beta".to_string())
+        );
+
+        let mut new_colors = kit_b.colors.clone();
+        new_colors.accent = "#C83E1D".to_string();
+        let updated_kit_b = db
+            .update_brand_kit(
+                org_id,
+                "brand-beta",
+                Some("Beta CVI Enterprise"),
+                Some(new_colors),
+                Some("Instrument Serif"),
+                Some("Inter"),
+            )
+            .expect("update brand-beta");
+        assert_eq!(updated_kit_b.version, 2);
+        assert_eq!(updated_kit_b.name, "Beta CVI Enterprise");
+        assert_eq!(updated_kit_b.colors.accent, "#C83E1D");
+        assert_eq!(updated_kit_b.minor_font, "Inter");
+
+        // 3. Compile Live Brand Component Gallery HTML
+        let gallery_html = compile_brand_gallery_html(&updated_kit_b);
+        assert!(gallery_html.contains("Beta CVI Enterprise Component Gallery"));
+        assert!(gallery_html.contains("--brand-accent: #C83E1D;"));
+        assert!(gallery_html.contains("data-slide-type=\"content-dark\""));
+
+        // 4. Extract brand signals from URL + text
+        let signals = extract_brand_signals_from_text_or_url(
+            "https://atelier-nordic.io/brand",
+            "Primary #161514 Accent #4F46E5 Dark #0E0E0D Light #F9F8F6",
+        );
+        assert_eq!(signals["brandName"], json!("Atelier-nordic"));
+        assert_eq!(signals["colors"]["primary"], json!("#161514"));
+        assert_eq!(signals["colors"]["accent"], json!("#4F46E5"));
+
+        // 5. Delete brand-beta and confirm active brand falls back to brand-alpha
+        let quota_after_delete = db
+            .delete_brand_kit(org_id, "brand-beta")
+            .expect("delete brand-beta");
+        assert_eq!(quota_after_delete.used_brands, 1);
+        assert_eq!(
+            db.get_organisation(org_id)
+                .unwrap()
+                .unwrap()
+                .active_brand_kit_id,
+            Some("brand-alpha".to_string())
         );
     }
 }

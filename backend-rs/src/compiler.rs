@@ -718,3 +718,151 @@ pub fn refine_deck_with_prompt(deck: &Deck, prompt: &str, brand: &BrandKit) -> D
     updated
 }
 
+/// Compiles a 6-slide Live Brand Component Gallery HTML document for a `BrandKit`
+/// (`cover`, `content`, `content-alt`, `content-dark`, `statement`, `end`).
+pub fn compile_brand_gallery_html(brand: &BrandKit) -> String {
+    let gallery_deck = Deck {
+        slug: format!("gallery-{}", brand.id),
+        org_id: brand.org_id.clone(),
+        version: brand.version,
+        title: format!("{} — Live CVI Component Gallery", brand.name),
+        brand_kit_id: brand.id.clone(),
+        brand_kit_version: brand.version,
+        slides: vec![
+            SlideSpec {
+                index: 0,
+                slide_type: "cover".to_string(),
+                eyebrow: format!("{} · CVI v{}", brand.name.to_ascii_uppercase(), brand.version),
+                title: format!("{} Component Gallery", brand.name),
+                lede: format!(
+                    "Typography: {} / {} · Primary {} · Accent {}",
+                    brand.major_font, brand.minor_font, brand.colors.primary, brand.colors.accent
+                ),
+                speaker_notes: "Live Brand Component Gallery cover slide.".to_string(),
+            },
+            SlideSpec {
+                index: 1,
+                slide_type: "content".to_string(),
+                eyebrow: "01 · LIGHT SURFACE & EDITORIAL BULLETS".to_string(),
+                title: "Light Surface Hierarchy & Contrast".to_string(),
+                lede: format!(
+                    "Surface Light {} paired with Text on Light {} for WCAG 2.1 AA readability.",
+                    brand.colors.surface_light, brand.colors.text_on_light
+                ),
+                speaker_notes: "Demonstrates light surface hierarchy and bullet styling.".to_string(),
+            },
+            SlideSpec {
+                index: 2,
+                slide_type: "content-alt".to_string(),
+                eyebrow: "02 · ALTERNATE SURFACE & 2-COLUMN CARDS".to_string(),
+                title: "Structured Card Comparison Grid".to_string(),
+                lede: format!(
+                    "Surface Alt {} and Secondary Accent {} across dual-column layout cards.",
+                    brand.colors.surface_alt, brand.colors.secondary
+                ),
+                speaker_notes: "Demonstrates 2-column card components on alternate surface.".to_string(),
+            },
+            SlideSpec {
+                index: 3,
+                slide_type: "content-dark".to_string(),
+                eyebrow: "03 · DARK SURFACE & 3-PILLAR GRID".to_string(),
+                title: "High-Contrast Dark Architecture Pillars".to_string(),
+                lede: format!(
+                    "Surface Dark {} with Accent {} focus card and Text on Dark {}.",
+                    brand.colors.surface_dark, brand.colors.accent, brand.colors.text_on_dark
+                ),
+                speaker_notes: "Demonstrates 3-pillar dark surface architecture cards.".to_string(),
+            },
+            SlideSpec {
+                index: 4,
+                slide_type: "statement".to_string(),
+                eyebrow: "04 · EXECUTIVE STATEMENT".to_string(),
+                title: "Zero-Drift Brand Governance at 1600×900".to_string(),
+                lede: format!(
+                    "Every presentation compiled under {} strictly enforces brand colour and typography tokens.",
+                    brand.name
+                ),
+                speaker_notes: "Demonstrates full-bleed executive statement slide.".to_string(),
+            },
+            SlideSpec {
+                index: 5,
+                slide_type: "end".to_string(),
+                eyebrow: format!("{} · VERIFIED CVI", brand.company_name.to_ascii_uppercase()),
+                title: "Gallery Verification Complete".to_string(),
+                lede: "All 6 core layout surfaces verified against CVI token specifications.".to_string(),
+                speaker_notes: "Closing slide of the Brand Component Gallery.".to_string(),
+            },
+        ],
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    };
+    compile_deck_to_html(&gallery_deck, brand)
+}
+
+/// Extracts deterministic brand color and typography signals from a URL or pasted guidelines text.
+pub fn extract_brand_signals_from_text_or_url(url: &str, text: &str) -> serde_json::Value {
+    let combined = format!("{url}\n{text}");
+    let mut colors = Vec::new();
+    let bytes = combined.as_bytes();
+    let mut i = 0;
+    while i + 7 <= bytes.len() {
+        if bytes[i] == b'#' {
+            let candidate = &combined[i + 1..i + 7];
+            if candidate.chars().all(|c| c.is_ascii_hexdigit()) {
+                let hex = format!("#{}", candidate.to_ascii_uppercase());
+                if !colors.contains(&hex) {
+                    colors.push(hex);
+                }
+                i += 7;
+                continue;
+            }
+        }
+        i += 1;
+    }
+
+    if colors.is_empty() {
+        colors = vec![
+            "#1E293B".to_string(),
+            "#D94E28".to_string(),
+            "#0F172A".to_string(),
+            "#FAF8F5".to_string(),
+        ];
+    }
+
+    let inferred_name = if !url.trim().is_empty() {
+        url.trim()
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_start_matches("www.")
+            .split(&['/', '.', ':'][..])
+            .next()
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                let mut chars = s.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => "Extracted Brand CVI".to_string(),
+                }
+            })
+            .unwrap_or_else(|| "Extracted Brand CVI".to_string())
+    } else {
+        "Extracted Brand CVI".to_string()
+    };
+
+    json!({
+        "brandName": inferred_name,
+        "colors": {
+            "primary": colors.first().cloned().unwrap_or_else(|| "#1E293B".to_string()),
+            "accent": colors.get(1).cloned().unwrap_or_else(|| "#D94E28".to_string()),
+            "surfaceDark": colors.get(2).cloned().unwrap_or_else(|| "#0F172A".to_string()),
+            "surfaceLight": colors.get(3).cloned().unwrap_or_else(|| "#FAF8F5".to_string())
+        },
+        "detectedHexColors": colors,
+        "fonts": {
+            "title": "Instrument Serif",
+            "body": "Plus Jakarta Sans"
+        },
+        "summary": format!("Extracted {} brand colour tokens for {}.", colors.len(), inferred_name)
+    })
+}
+
+

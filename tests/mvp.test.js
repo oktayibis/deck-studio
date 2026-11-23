@@ -529,3 +529,39 @@ test('11. Phase 4: React + TypeScript Vite Frontend & Containerised Deployment M
   const envExample = fs.readFileSync(envExamplePath, 'utf8');
   assert.ok(envExample.includes('DATABASE_URL=') && envExample.includes('PORT=3456'), 'Expected DATABASE_URL and PORT in .env.example');
 });
+
+test('12. Phase 5: Tablet & Mobile Responsive Studio Layout, Touch Gestures & Full Rust SPA Endpoint Parity (#11, #20, #21)', async () => {
+  // 1. Verify responsive tablet (1024px) & mobile (768px) CSS breakpoints in both frontend/src/styles.css and src/public/styles.css
+  const reactStyles = fs.readFileSync(path.join(process.cwd(), 'frontend', 'src', 'styles.css'), 'utf8');
+  const publicStyles = fs.readFileSync(path.join(process.cwd(), 'src', 'public', 'styles.css'), 'utf8');
+
+  for (const [label, css] of [['frontend/src/styles.css', reactStyles], ['src/public/styles.css', publicStyles]]) {
+    assert.ok(css.includes('@media (max-width: 1024px)'), `Expected 1024px tablet breakpoint in ${label}`);
+    assert.ok(css.includes('@media (max-width: 768px)'), `Expected 768px mobile breakpoint in ${label}`);
+    assert.ok(css.includes('scroll-snap-type: x mandatory'), `Expected touch filmstrip scroll-snap in ${label}`);
+  }
+
+  // 2. Verify touch swipe & bottom-edge tap gestures in src/engine/deck-engine.js
+  const engineJs = fs.readFileSync(path.join(process.cwd(), 'src', 'engine', 'deck-engine.js'), 'utf8');
+  assert.ok(engineJs.includes('touchstart') && engineJs.includes('touchend'), 'Expected touchstart/touchend gesture listeners in deck-engine.js');
+  assert.ok(engineJs.includes('touch-tap'), 'Expected bottom-edge touch dock toggle in deck-engine.js');
+
+  // 3. Verify complete React 19 SPA endpoint parity in backend-rs/src/main.rs
+  const rustMain = fs.readFileSync(path.join(process.cwd(), 'backend-rs', 'src', 'main.rs'), 'utf8');
+  for (const route of [
+    '/api/org/settings',
+    '/api/brands/select',
+    '/api/brands/crawl',
+    '/api/brands/fonts',
+    '/api/brands/:kit_id',
+    '/api/gallery/preview',
+    '/api/gallery/check',
+    '/api/media/samples',
+    '/api/media/upload',
+    '/api/decks/:slug/revert',
+    '/api/decks/:slug/check',
+    '/api/decks/:slug/export/pdf'
+  ]) {
+    assert.ok(rustMain.includes(route), `Expected route ${route} in backend-rs/src/main.rs`);
+  }
+});
