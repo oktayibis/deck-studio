@@ -76,7 +76,18 @@ To move fast while preserving `Gemini 4 Argon (High)` quota, all development wor
 
 ---
 
-## 7. How to Run the ADLC Workflow
+## 7. Phase 6: Real-Time Agent Build Stepper, Multi-Tenant Workspace Switcher & Slide Management (GitHub Issues #23–#26)
+
+| Issue | Phase | Title | Assigned Model Tier | Area | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **#23** | Phase 6 (Live Progress UI) | Real-Time Agent Build Progress Stepper UI (`1. Read CVI` → `2. Storyline` → `3. Compile` → `4. 8-Pt Check`) | `gemini-4-hydrogen-high` | `area:ui`, `area:agent` | ✅ Done |
+| **#24** | Phase 6 (Multi-Tenant) | Multi-Tenant Workspace Switcher (`GET/POST /api/orgs` & Topbar `#header-org-select` across Node, Rust & React/Studio UI) | `gemini-4-argon-high` | `area:saas`, `area:ui` | ✅ Done |
+| **#25** | Phase 6 (Slide Ops) | Slide Reorder (`↑ Up` / `↓ Down`), `+ Add Slide` & `Delete Slide` in Slide Inspector (`POST/DELETE /api/decks/:slug/slides/*`) | `gemini-4-argon-high` | `area:ui`, `area:engine` | ✅ Done |
+| **#26** | Phase 6 (QA / ADLC) | Phase 6 Full-Stack Verification (Vite Build + 13 Node E2E Tests + 9 Rust Cargo Tests) & Roadmap Sync | `gemini-4-hydrogen-low` | `area:qa` | ✅ Done |
+
+---
+
+## 8. How to Run the ADLC Workflow
 
 ```bash
 # 1. Check current GitHub Issues, PRs, and branch state

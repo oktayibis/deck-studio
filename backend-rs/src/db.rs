@@ -741,6 +741,150 @@ impl Database {
         Ok(saved)
     }
 
+    /// Lists all multi-tenant workspaces in SQLite (ensuring the default workspaces exist).
+    pub fn list_organisations(&self) -> Result<Vec<Organisation>, DbError> {
+        for preset_id in ["default-org", "nordic-labs", "atelier-studio"] {
+            let _ = self.ensure_organisation(preset_id)?;
+        }
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DbError::Sqlite(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, tier, max_brands, daily_deck_limit, settings_json, updated_at
+             FROM organisations
+             ORDER BY id ASC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            let settings_str: String = r.get::<_, Option<String>>(5)?.unwrap_or_default();
+            let settings: serde_json::Value =
+                serde_json::from_str(&settings_str).unwrap_or_else(|_| json!({}));
+            let active_brand_kit_id = settings
+                .get("activeBrandKitId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let role = settings
+                .get("role")
+                .and_then(|v| v.as_str())
+                .unwrap_or("brand_admin")
+                .to_string();
+
+            Ok(Organisation {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                tier: r.get(2)?,
+                max_brands: r.get::<_, u32>(3)?,
+                daily_deck_limit: r.get::<_, u32>(4)?,
+                active_brand_kit_id,
+                role,
+                updated_at: r.get(6)?,
+            })
+        })?;
+        let mut list = Vec::new();
+        for row in rows {
+            list.push(row?);
+        }
+        Ok(list)
+    }
+
+    /// Inserts a new slide into an existing deck (Issue #25).
+    pub fn add_deck_slide(
+        &self,
+        org_id: &str,
+        slug: &str,
+        after_index: Option<usize>,
+        slide_type: Option<&str>,
+        title: Option<&str>,
+        lede: Option<&str>,
+    ) -> Result<(Deck, usize), DbError> {
+        let mut deck = self
+            .get_deck(org_id, slug)?
+            .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+        let insert_idx = match after_index {
+            Some(idx) if idx < deck.slides.len() => idx + 1,
+            _ => deck.slides.len().saturating_sub(1),
+        };
+        let new_slide = crate::models::SlideSpec {
+            index: insert_idx,
+            slide_type: slide_type.unwrap_or("content").to_string(),
+            eyebrow: format!("0{} · KEY POINT", insert_idx + 1),
+            title: title.unwrap_or("New Brand-Aligned Slide").to_string(),
+            lede: lede
+                .unwrap_or("Supporting factual context and decision takeaway.")
+                .to_string(),
+            speaker_notes: "Added via Slide Inspector.".to_string(),
+        };
+        deck.slides.insert(insert_idx, new_slide);
+        for (i, s) in deck.slides.iter_mut().enumerate() {
+            s.index = i;
+        }
+        deck.version = deck.version.saturating_add(1);
+        let saved = self.save_deck(&deck, false)?;
+        Ok((saved, insert_idx))
+    }
+
+    /// Deletes a slide at `slide_index` from an existing deck (Issue #25).
+    pub fn delete_deck_slide(
+        &self,
+        org_id: &str,
+        slug: &str,
+        slide_index: usize,
+    ) -> Result<Deck, DbError> {
+        let mut deck = self
+            .get_deck(org_id, slug)?
+            .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+        if deck.slides.len() <= 1 {
+            return Err(DbError::InvalidInput(
+                "A presentation must contain at least 1 slide.".to_string(),
+            ));
+        }
+        if slide_index >= deck.slides.len() {
+            return Err(DbError::InvalidInput(format!(
+                "Invalid slide index {slide_index}"
+            )));
+        }
+        deck.slides.remove(slide_index);
+        for (i, s) in deck.slides.iter_mut().enumerate() {
+            s.index = i;
+        }
+        deck.version = deck.version.saturating_add(1);
+        self.save_deck(&deck, false)
+    }
+
+    /// Moves a slide up or down at `slide_index` in an existing deck (Issue #25).
+    pub fn move_deck_slide(
+        &self,
+        org_id: &str,
+        slug: &str,
+        slide_index: usize,
+        direction: &str,
+    ) -> Result<(Deck, usize), DbError> {
+        let mut deck = self
+            .get_deck(org_id, slug)?
+            .ok_or_else(|| DbError::NotFound(format!("Deck '{slug}' not found in '{org_id}'")))?;
+        if slide_index >= deck.slides.len() {
+            return Err(DbError::InvalidInput(format!(
+                "Invalid slide index {slide_index}"
+            )));
+        }
+        let target_idx = if direction == "down" {
+            if slide_index + 1 < deck.slides.len() {
+                slide_index + 1
+            } else {
+                slide_index
+            }
+        } else {
+            slide_index.saturating_sub(1)
+        };
+        deck.slides.swap(slide_index, target_idx);
+        for (i, s) in deck.slides.iter_mut().enumerate() {
+            s.index = i;
+        }
+        deck.version = deck.version.saturating_add(1);
+        let saved = self.save_deck(&deck, false)?;
+        Ok((saved, target_idx))
+    }
+
     pub fn record_telemetry(&self, entry: &UsageTelemetry) -> Result<(), DbError> {
         let conn = self
             .conn

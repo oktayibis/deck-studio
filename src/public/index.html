@@ -23,6 +23,15 @@
     </nav>
 
     <div class="topbar-right">
+      <div class="brand-selector-pill" title="Active Workspace (Multi-Tenant)">
+        <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">ORG</span>
+        <select id="header-org-select" aria-label="Active Workspace" style="border:none;background:transparent;font-family:var(--font-sans);font-size:12px;font-weight:500;color:var(--text-primary);cursor:pointer;outline:none;">
+          <option value="default-org">Default Workspace</option>
+          <option value="nordic-labs">Nordic Labs</option>
+          <option value="atelier-studio">Atelier Studio</option>
+        </select>
+      </div>
+
       <div class="brand-selector-pill" title="Active Brand CVI">
         <div class="brand-selector-dots" id="header-brand-dots">
           <span class="brand-dot" style="background:#0F172A"></span>
@@ -140,6 +149,20 @@
             </button>
             <button type="button" class="btn" id="stop-job-btn" style="display:none;">Stop</button>
           </div>
+
+          <!-- Real-Time Agent Build Progress Stepper (Issue #23) -->
+          <div id="agent-progress-stepper" data-testid="agent-progress-stepper" style="display:none;flex-direction:column;gap:8px;padding:12px;border-radius:var(--radius-sm);background:var(--bg-canvas);border:1px solid var(--border-subtle);">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:600;">
+              <span id="stepper-status-label">Agent Build Pipeline</span>
+              <span id="stepper-phase-pill" class="badge badge-pass">Ready</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:11px;">
+              <div class="stepper-node" data-step-phase="cvi" style="padding:6px 8px;border-radius:6px;background:var(--bg-surface);border:1px solid var(--border-subtle);text-align:center;font-weight:500;">1. Read CVI</div>
+              <div class="stepper-node" data-step-phase="story" style="padding:6px 8px;border-radius:6px;background:var(--bg-surface);border:1px solid var(--border-subtle);text-align:center;font-weight:500;">2. Storyline</div>
+              <div class="stepper-node" data-step-phase="compile" style="padding:6px 8px;border-radius:6px;background:var(--bg-surface);border:1px solid var(--border-subtle);text-align:center;font-weight:500;">3. Compile</div>
+              <div class="stepper-node" data-step-phase="check" style="padding:6px 8px;border-radius:6px;background:var(--bg-surface);border:1px solid var(--border-subtle);text-align:center;font-weight:500;">4. 8-Pt Check</div>
+            </div>
+          </div>
         </section>
 
         <!-- TAB B: SLIDE INSPECTOR & BRAND VERIFICATION (Cleanly tucked in tab 2) -->
@@ -148,6 +171,13 @@
             <div class="card-heading" style="margin-bottom:10px;">
               <span class="card-title">Edit Active Slide</span>
               <button type="button" class="btn btn-sm btn-primary" id="save-slide-inspector-btn">Save Slide</button>
+            </div>
+            <!-- Slide Reorder, Add & Delete Controls (Issue #25) -->
+            <div class="slide-inspector-actions" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+              <button type="button" class="btn btn-sm" id="move-slide-up-btn" title="Move slide earlier">↑ Up</button>
+              <button type="button" class="btn btn-sm" id="move-slide-down-btn" title="Move slide later">↓ Down</button>
+              <button type="button" class="btn btn-sm" id="add-slide-btn" title="Insert new slide after current">+ Add</button>
+              <button type="button" class="btn btn-sm" id="delete-slide-btn" title="Delete active slide">Delete</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;">
               <div class="field-group">

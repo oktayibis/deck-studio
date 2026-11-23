@@ -189,9 +189,15 @@ export interface JobStepSummary {
   tool: string;
   message: string;
   phase: string;
+  timestamp?: string;
 }
 
 export interface BuildJobSummary {
+  id?: string;
+  status?: 'running' | 'completed' | 'failed' | 'cancelled' | string;
+  phase?: string;
+  error?: string | null;
+  elapsedMs?: number;
   steps?: JobStepSummary[];
 }
 

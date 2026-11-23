@@ -42,7 +42,14 @@ const DRAFT_STORAGE_KEY = 'deck_studio_draft_v1';
 
 class DeckStudioApp {
   constructor() {
+    this.activeOrgId = 'default-org';
+    try {
+      this.activeOrgId = localStorage.getItem('deck_studio_org_id') || 'default-org';
+    } catch {
+      this.activeOrgId = 'default-org';
+    }
     this.org = null;
+    this.organisations = [];
     this.quota = null;
     this.brandKits = [];
     this.activeBrandKit = null;
@@ -116,9 +123,10 @@ class DeckStudioApp {
   }
 
   async refreshBootstrap() {
-    const res = await fetch('/api/bootstrap');
+    const res = await fetch(`/api/bootstrap?orgId=${encodeURIComponent(this.activeOrgId)}`);
     const data = await res.json();
     this.org = data.org;
+    this.organisations = data.organisations || [];
     this.quota = data.quota;
     this.brandKits = data.brandKits || [];
     this.activeBrandKit = data.activeBrandKit;
@@ -126,11 +134,21 @@ class DeckStudioApp {
     this.auditLog = data.auditLog || [];
     this.sampleTemplates = data.sampleTemplates || [];
 
+    const orgSel = document.getElementById('header-org-select');
+    if (orgSel && this.organisations.length > 0) {
+      orgSel.innerHTML = this.organisations
+        .map(
+          (o) =>
+            `<option value="${o.id}" ${o.id === this.activeOrgId ? 'selected' : ''}>${o.name}</option>`
+        )
+        .join('');
+    }
+
     if (!this.selectedDeck && this.decks.length > 0) {
       this.selectedDeck = this.decks[0];
     } else if (this.selectedDeck) {
       const updated = this.decks.find((d) => d.slug === this.selectedDeck.slug);
-      if (updated) this.selectedDeck = updated;
+      this.selectedDeck = updated || this.decks[0] || null;
     }
 
     this.renderHeaderAndQuota();
@@ -155,6 +173,10 @@ class DeckStudioApp {
 
     document.getElementById('header-brand-select')?.addEventListener('change', async (e) => {
       await this.selectBrandKit(e.target.value);
+    });
+
+    document.getElementById('header-org-select')?.addEventListener('change', async (e) => {
+      await this.switchWorkspace(e.target.value);
     });
 
     // Left sidebar segmented tabs (Compose Deck vs Slide & Check)
@@ -204,13 +226,27 @@ class DeckStudioApp {
     const res = await fetch('/api/brands/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brandKitId })
+      body: JSON.stringify({ orgId: this.activeOrgId, brandKitId })
     });
     if (res.ok) {
       await this.refreshBootstrap();
       this.refreshBrandGalleryIframe();
       this.showToast(`Switched brand to ${this.activeBrandKit?.name}`);
     }
+  }
+
+  async switchWorkspace(orgId) {
+    if (!orgId) return;
+    this.activeOrgId = orgId;
+    this.selectedDeck = null;
+    this.activeSlideIndex = 0;
+    try {
+      localStorage.setItem('deck_studio_org_id', orgId);
+    } catch {
+      // ignore
+    }
+    await this.refreshBootstrap();
+    this.showToast(`Switched workspace to ${this.org?.name || orgId}`);
   }
 
   renderHeaderAndQuota() {
@@ -388,6 +424,10 @@ class DeckStudioApp {
     document.getElementById('apply-refine-btn')?.addEventListener('click', () => this.handleRefineSelectedDeck());
     document.getElementById('undo-deck-btn')?.addEventListener('click', () => this.handleUndoDeck());
     document.getElementById('save-slide-inspector-btn')?.addEventListener('click', () => this.handleSaveSlideInspector());
+    document.getElementById('move-slide-up-btn')?.addEventListener('click', () => this.handleMoveSlide('up'));
+    document.getElementById('move-slide-down-btn')?.addEventListener('click', () => this.handleMoveSlide('down'));
+    document.getElementById('add-slide-btn')?.addEventListener('click', () => this.handleAddSlide());
+    document.getElementById('delete-slide-btn')?.addEventListener('click', () => this.handleDeleteSlide());
 
     // Viewer Controls
     document.getElementById('viewer-prev-btn')?.addEventListener('click', () => {
@@ -507,12 +547,14 @@ class DeckStudioApp {
 
     buildBtn.disabled = true;
     buildBtn.textContent = 'Building & Verifying Slides…';
+    this.updateProgressStepper('running', 'Building Storyline & Compiling…');
 
     try {
       const res = await fetch('/api/decks/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          orgId: this.activeOrgId,
           brief,
           mediaFiles: this.mediaTray,
           brandKitId
@@ -521,6 +563,7 @@ class DeckStudioApp {
 
       const data = await res.json();
       if (!res.ok) {
+        this.updateProgressStepper('error', 'Failed');
         if (res.status === 429 || data.code === 'DAILY_DECK_LIMIT_EXCEEDED') {
           this.openQuotaUpgradeModal(data.error || 'Daily presentation limit reached.');
         }
@@ -531,11 +574,12 @@ class DeckStudioApp {
       this.selectedDeck = data.deck;
       this.activeSlideIndex = 0;
       this.renderJobActivity(data.job);
+      this.updateProgressStepper('ready', `Verified (${data.deck.slides.length} slides)`);
       await this.refreshBootstrap();
       this.showToast(`Created "${data.deck.title}" (${data.deck.slides.length} slides)`);
     } finally {
       buildBtn.disabled = false;
-      buildBtn.textContent = 'Create Presentation';
+      buildBtn.textContent = 'Generate Presentation';
     }
   }
 
@@ -644,13 +688,13 @@ class DeckStudioApp {
       titleEl.textContent = cleanTitle;
     }
     if (iframe) {
-      iframe.src = `/api/decks/${encodeURIComponent(deck.slug)}/view?slide=${this.activeSlideIndex}&t=${Date.now()}`;
+      iframe.src = `/api/decks/${encodeURIComponent(deck.slug)}/view?orgId=${encodeURIComponent(this.activeOrgId)}&slide=${this.activeSlideIndex}&t=${Date.now()}`;
     }
     if (zipLink) {
-      zipLink.href = `/api/decks/${encodeURIComponent(deck.slug)}/export/zip`;
+      zipLink.href = `/api/decks/${encodeURIComponent(deck.slug)}/export/zip?orgId=${encodeURIComponent(this.activeOrgId)}`;
     }
     if (pdfLink) {
-      pdfLink.href = `/api/decks/${encodeURIComponent(deck.slug)}/export/pdf`;
+      pdfLink.href = `/api/decks/${encodeURIComponent(deck.slug)}/export/pdf?orgId=${encodeURIComponent(this.activeOrgId)}`;
     }
 
     // Render clickable slide filmstrip
@@ -707,6 +751,99 @@ class DeckStudioApp {
     if (ledeEl) ledeEl.value = slide?.lede || '';
     if (notesEl) notesEl.value = slide?.speakerNotes || '';
     if (saveBtn) saveBtn.disabled = !slide;
+
+    const totalSlides = this.selectedDeck?.slides?.length || 0;
+    const upBtn = document.getElementById('move-slide-up-btn');
+    const downBtn = document.getElementById('move-slide-down-btn');
+    const addBtn = document.getElementById('add-slide-btn');
+    const delBtn = document.getElementById('delete-slide-btn');
+    if (upBtn) upBtn.disabled = !slide || this.activeSlideIndex <= 0;
+    if (downBtn) downBtn.disabled = !slide || this.activeSlideIndex >= totalSlides - 1;
+    if (addBtn) addBtn.disabled = !this.selectedDeck;
+    if (delBtn) delBtn.disabled = !slide || totalSlides <= 1;
+  }
+
+  updateProgressStepper(state, labelText) {
+    const stepper = document.getElementById('agent-progress-stepper');
+    const pill = document.getElementById('stepper-phase-pill');
+    const label = document.getElementById('stepper-status-label');
+    if (!stepper) return;
+    stepper.style.display = 'flex';
+    if (label && labelText) label.textContent = labelText;
+    if (pill) {
+      pill.textContent = state === 'running' ? 'Running' : state === 'error' ? 'Error' : 'Verified';
+      pill.className = `badge ${state === 'error' ? 'badge-fail' : state === 'running' ? 'badge-warn' : 'badge-pass'}`;
+    }
+    stepper.querySelectorAll('.stepper-node').forEach((node) => {
+      node.style.borderColor = state === 'ready' ? 'var(--positive)' : 'var(--accent)';
+      node.style.color = state === 'ready' ? 'var(--positive)' : 'var(--text-primary)';
+    });
+  }
+
+  async handleMoveSlide(direction) {
+    if (!this.selectedDeck) return;
+    const res = await fetch(
+      `/api/decks/${encodeURIComponent(this.selectedDeck.slug)}/slides/${this.activeSlideIndex}/move`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId: this.activeOrgId, direction })
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      this.showToast(data.error || 'Could not reorder slide');
+      return;
+    }
+    this.selectedDeck = data.deck;
+    if (typeof data.newIndex === 'number') {
+      this.activeSlideIndex = data.newIndex;
+    }
+    await this.refreshBootstrap();
+    this.showToast(`Moved slide to position ${this.activeSlideIndex + 1}`);
+  }
+
+  async handleAddSlide() {
+    if (!this.selectedDeck) return;
+    const res = await fetch(`/api/decks/${encodeURIComponent(this.selectedDeck.slug)}/slides`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orgId: this.activeOrgId,
+        afterIndex: this.activeSlideIndex,
+        type: 'content',
+        title: 'New Brand-Aligned Slide',
+        lede: 'Key supporting evidence and takeaway.'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      this.showToast(data.error || 'Could not add slide');
+      return;
+    }
+    this.selectedDeck = data.deck;
+    if (typeof data.insertedIndex === 'number') {
+      this.activeSlideIndex = data.insertedIndex;
+    }
+    await this.refreshBootstrap();
+    this.showToast(`Added Slide ${this.activeSlideIndex + 1}`);
+  }
+
+  async handleDeleteSlide() {
+    if (!this.selectedDeck) return;
+    const res = await fetch(
+      `/api/decks/${encodeURIComponent(this.selectedDeck.slug)}/slides/${this.activeSlideIndex}?orgId=${encodeURIComponent(this.activeOrgId)}`,
+      { method: 'DELETE' }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      this.showToast(data.error || 'Could not delete slide');
+      return;
+    }
+    this.selectedDeck = data.deck;
+    this.activeSlideIndex = Math.max(0, Math.min(this.activeSlideIndex, (data.deck.slides?.length || 1) - 1));
+    await this.refreshBootstrap();
+    this.showToast('Deleted slide');
   }
 
   async handleSaveSlideInspector() {

@@ -565,3 +565,76 @@ test('12. Phase 5: Tablet & Mobile Responsive Studio Layout, Touch Gestures & Fu
     assert.ok(rustMain.includes(route), `Expected route ${route} in backend-rs/src/main.rs`);
   }
 });
+
+test('13. Phase 6: Real-Time Agent Build Stepper, Multi-Tenant Workspace Switcher & Slide Reorder/Add/Delete (#23, #24, #25, #26)', async () => {
+  // 1. Verify UI markup for Agent Build Progress Stepper (#23), Workspace Switcher (#24), and Slide Inspector Actions (#25)
+  const publicHtml = fs.readFileSync(path.join(process.cwd(), 'src', 'public', 'index.html'), 'utf8');
+  const reactApp = fs.readFileSync(path.join(process.cwd(), 'frontend', 'src', 'App.tsx'), 'utf8');
+
+  for (const [label, source] of [['src/public/index.html', publicHtml], ['frontend/src/App.tsx', reactApp]]) {
+    assert.ok(source.includes('agent-progress-stepper'), `Expected agent-progress-stepper in ${label}`);
+    assert.ok(source.includes('header-org-select'), `Expected header-org-select in ${label}`);
+    assert.ok(source.includes('slide-inspector-actions'), `Expected slide-inspector-actions in ${label}`);
+  }
+
+  // 2. Test live HTTP API for Multi-Tenant Orgs (#24) and Slide Add / Move / Delete (#25)
+  const app = createApp();
+  const server = await new Promise((resolve) => {
+    const srv = app.listen(0, '127.0.0.1', () => resolve(srv));
+  });
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    await storage.ensureSeedData(TEST_ORG);
+    const orgsRes = await fetch(`${baseUrl}/api/orgs`);
+    assert.equal(orgsRes.status, 200);
+    const orgsJson = await orgsRes.json();
+    assert.ok(Array.isArray(orgsJson.organisations) && orgsJson.organisations.length >= 3);
+
+    // Ensure a deck exists in TEST_ORG
+    const decks = storage.listDecks(TEST_ORG);
+    assert.ok(decks.length >= 1, 'Expected at least 1 deck in TEST_ORG');
+    const slug = decks[0].slug;
+    const initialCount = decks[0].slides.length;
+
+    // Add a slide after index 1
+    const addRes = await fetch(`${baseUrl}/api/decks/${encodeURIComponent(slug)}/slides`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orgId: TEST_ORG,
+        afterIndex: 1,
+        type: 'content',
+        title: 'Phase 6 Added Slide',
+        lede: 'Added via Phase 6 Slide Inspector API test.'
+      })
+    });
+    assert.equal(addRes.status, 200);
+    const addJson = await addRes.json();
+    assert.equal(addJson.insertedIndex, 2);
+    assert.equal(addJson.deck.slides.length, initialCount + 1);
+    assert.equal(addJson.deck.slides[2].title, 'Phase 6 Added Slide');
+
+    // Move slide 2 up to index 1
+    const moveRes = await fetch(`${baseUrl}/api/decks/${encodeURIComponent(slug)}/slides/2/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId: TEST_ORG, direction: 'up' })
+    });
+    assert.equal(moveRes.status, 200);
+    const moveJson = await moveRes.json();
+    assert.equal(moveJson.newIndex, 1);
+    assert.equal(moveJson.deck.slides[1].title, 'Phase 6 Added Slide');
+
+    // Delete slide at index 1
+    const delRes = await fetch(`${baseUrl}/api/decks/${encodeURIComponent(slug)}/slides/1?orgId=${encodeURIComponent(TEST_ORG)}`, {
+      method: 'DELETE'
+    });
+    assert.equal(delRes.status, 200);
+    const delJson = await delRes.json();
+    assert.equal(delJson.deck.slides.length, initialCount);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

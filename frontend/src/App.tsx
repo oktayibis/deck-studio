@@ -55,6 +55,20 @@ const STARTER_BRIEFS: Record<string, StarterBriefPreset> = {
 
 const DRAFT_STORAGE_KEY = 'deck_studio_draft_v1';
 const THEME_STORAGE_KEY = 'deck_studio_theme_v1';
+const ORG_STORAGE_KEY = 'deck_studio_org_id';
+
+const WORKSPACE_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: 'default-org', label: 'Default Workspace' },
+  { id: 'nordic-labs', label: 'Nordic Labs' },
+  { id: 'atelier-studio', label: 'Atelier Studio' },
+];
+
+const AGENT_BUILD_STAGES = [
+  { key: 'cvi', label: '1. Read Brand CVI' },
+  { key: 'storyline', label: '2. Storyline & Facts' },
+  { key: 'compile', label: '3. Compile 1600×900 Slides' },
+  { key: 'check', label: '4. Chromium 8-Point Check' },
+] as const;
 
 const COLOR_ROLES: Array<{ key: keyof BrandColorMap; label: string }> = [
   { key: 'primary', label: 'Primary' },
@@ -131,12 +145,92 @@ function loadInitialTheme(): ThemeMode {
   return 'light';
 }
 
+function loadInitialOrgId(): string {
+  try {
+    return localStorage.getItem(ORG_STORAGE_KEY) || 'default-org';
+  } catch {
+    return 'default-org';
+  }
+}
+
+function resolveBuildStageStates(
+  isBuilding: boolean,
+  liveStageIndex: number,
+  lastBuildJob: BuildJobSummary | null
+): Array<{
+  key: string;
+  label: string;
+  status: 'done' | 'active' | 'pending' | 'error';
+  detail?: string;
+}> {
+  const steps = lastBuildJob?.steps || [];
+  if (isBuilding) {
+    return AGENT_BUILD_STAGES.map((stage, idx) => ({
+      ...stage,
+      status: idx < liveStageIndex ? 'done' : idx === liveStageIndex ? 'active' : 'pending',
+    }));
+  }
+
+  const hasTool = (tools: string[], phases: string[] = []) =>
+    steps.some((s) => tools.includes(s.tool) || phases.includes(s.phase));
+
+  const stageMatches: Array<{ matched: boolean; step?: JobStepSummary }> = [
+    {
+      matched: hasTool(['read_brand_kit', 'list_components'], ['story']),
+      step: steps.find((s) => s.tool === 'read_brand_kit' || s.tool === 'list_components'),
+    },
+    {
+      matched: hasTool(['add_media', 'report_progress'], ['story']),
+      step:
+        steps.find((s) => s.phase === 'story' && s.tool === 'report_progress') ||
+        steps.find((s) => s.tool === 'add_media'),
+    },
+    {
+      matched: hasTool(['write_deck', 'write_slide'], ['building']),
+      step: steps.find((s) => s.tool === 'write_deck' || s.phase === 'building'),
+    },
+    {
+      matched: hasTool(
+        ['run_check', 'render_screenshots'],
+        ['checking', 'fixing', 'ready']
+      ),
+      step: [...steps]
+        .reverse()
+        .find(
+          (s) =>
+            s.phase === 'ready' || s.tool === 'run_check' || s.tool === 'render_screenshots'
+        ),
+    },
+  ];
+
+  const isCompleted = lastBuildJob?.status === 'completed' || lastBuildJob?.phase === 'ready';
+  const isFailed = lastBuildJob?.status === 'failed' || lastBuildJob?.phase === 'failed';
+  const highestMatched = stageMatches.reduce((acc, s, i) => (s.matched ? i : acc), -1);
+
+  return AGENT_BUILD_STAGES.map((stage, idx) => {
+    const m = stageMatches[idx];
+    let status: 'done' | 'active' | 'pending' | 'error' = 'pending';
+    if (isCompleted || m.matched || idx <= highestMatched) {
+      status = 'done';
+    } else if (isFailed && idx === highestMatched + 1) {
+      status = 'error';
+    }
+    return {
+      ...stage,
+      status,
+      detail: m.step?.message,
+    };
+  });
+}
+
 // ============================================================================
 // Top Navigation Header
 // ============================================================================
 interface TopBarProps {
   currentView: AppViewName;
   onSwitchView: (view: AppViewName) => void;
+  activeOrgId: string;
+  onSwitchOrg: (orgId: string) => void;
   brandKits: BrandKitSummary[];
   activeBrandKit: BrandKitSummary | null;
   onSelectBrand: (id: string) => void;
@@ -148,6 +242,8 @@ interface TopBarProps {
 function TopBar({
   currentView,
   onSwitchView,
+  activeOrgId,
+  onSwitchOrg,
   brandKits,
   activeBrandKit,
   onSelectBrand,
@@ -188,6 +284,31 @@ function TopBar({
       </nav>
 
       <div className="topbar-right">
+        <div className="brand-selector-pill" title="Active Workspace">
+          <select
+            id="header-org-select"
+            aria-label="Active Workspace"
+            value={activeOrgId}
+            onChange={(e) => onSwitchOrg(e.target.value)}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              fontFamily: 'var(--font-sans)',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              outline: 'none',
+            }}
+          >
+            {WORKSPACE_OPTIONS.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="brand-selector-pill" title="Active Brand CVI">
           <div className="brand-selector-dots">
             <span
@@ -266,6 +387,7 @@ function TopBar({
 // ============================================================================
 interface StudioViewProps {
   isActive: boolean;
+  activeOrgId: string;
   brandKits: BrandKitSummary[];
   activeBrandKit: BrandKitSummary | null;
   selectedDeck: DeckSummary | null;
@@ -277,6 +399,7 @@ interface StudioViewProps {
 
 function StudioView({
   isActive,
+  activeOrgId,
   brandKits,
   activeBrandKit,
   selectedDeck,
@@ -300,6 +423,8 @@ function StudioView({
   const [mediaTray, setMediaTray] = useState<MediaTrayItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
+  const [lastBuildJob, setLastBuildJob] = useState<BuildJobSummary | null>(null);
+  const [liveStageIndex, setLiveStageIndex] = useState(0);
 
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [inspectorType, setInspectorType] = useState('content');
@@ -316,6 +441,23 @@ function StudioView({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Advance live stepper stages smoothly while a build request is in flight
+  useEffect(() => {
+    if (!isBuilding) return;
+    setLiveStageIndex(0);
+    const timer = setInterval(() => {
+      setLiveStageIndex((prev) => (prev < 3 ? prev + 1 : prev));
+    }, 650);
+    return () => clearInterval(timer);
+  }, [isBuilding]);
+
+  // Clear stale build telemetry when switching workspaces
+  useEffect(() => {
+    setLastBuildJob(null);
+    setJobSteps([]);
+    setActiveSlideIndex(0);
+  }, [activeOrgId]);
 
   // Sync draft to localStorage
   useEffect(() => {
@@ -369,6 +511,7 @@ function StudioView({
       const uploaded: MediaTrayItem[] = [];
       for (const file of files) {
         const fd = new FormData();
+        fd.append('orgId', activeOrgId);
         fd.append('file', file);
         fd.append('caption', `Visual evidence: ${file.name}`);
         const res = await fetch('/api/media/upload', { method: 'POST', body: fd });
@@ -383,7 +526,7 @@ function StudioView({
         setMediaTray((prev) => [...prev, ...uploaded]);
       }
     },
-    [onShowToast]
+    [activeOrgId, onShowToast]
   );
 
   // Paste handler when Studio is active
@@ -424,11 +567,13 @@ function StudioView({
 
   const handleBuildDeck = async () => {
     setIsBuilding(true);
+    setLastBuildJob(null);
     try {
       const res = await fetch('/api/decks/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          orgId: activeOrgId,
           brief: {
             topic,
             audience,
@@ -448,6 +593,9 @@ function StudioView({
         error?: string;
         code?: string;
       };
+      if (data.job) {
+        setLastBuildJob(data.job);
+      }
       if (!res.ok || !data.deck) {
         if (res.status === 429 || data.code === 'DAILY_DECK_LIMIT_EXCEEDED') {
           onOpenQuotaModal(data.error || 'Daily presentation limit reached.');
@@ -479,13 +627,16 @@ function StudioView({
       const res = await fetch(`/api/decks/${encodeURIComponent(selectedDeck.slug)}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ orgId: activeOrgId, prompt }),
       });
       const data = (await res.json()) as {
         deck?: DeckSummary;
         job?: BuildJobSummary;
         error?: string;
       };
+      if (data.job) {
+        setLastBuildJob(data.job);
+      }
       if (!res.ok || !data.deck) {
         onShowToast(data.error || 'Refinement failed');
         return;
@@ -504,7 +655,7 @@ function StudioView({
     const res = await fetch(`/api/decks/${encodeURIComponent(selectedDeck.slug)}/revert`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ orgId: activeOrgId }),
     });
     const data = (await res.json()) as { deck?: DeckSummary; error?: string };
     if (!res.ok || !data.deck) {
@@ -533,6 +684,7 @@ function StudioView({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            orgId: activeOrgId,
             type: inspectorType,
             title: inspectorTitle,
             lede: inspectorLede,
@@ -557,12 +709,128 @@ function StudioView({
     }
   };
 
+  const onMoveSlide = async (direction: 'up' | 'down') => {
+    if (!selectedDeck) return;
+    if (direction === 'up' && activeSlideIndex === 0) return;
+    if (direction === 'down' && activeSlideIndex >= selectedDeck.slides.length - 1) return;
+
+    setIsSavingSlide(true);
+    try {
+      const res = await fetch(
+        `/api/decks/${encodeURIComponent(selectedDeck.slug)}/slides/${activeSlideIndex}/move`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId: activeOrgId, direction }),
+        }
+      );
+      const data = (await res.json()) as {
+        deck?: DeckSummary;
+        checkReport?: DeckCheckReportSummary;
+        newIndex?: number;
+        error?: string;
+      };
+      if (!res.ok || !data.deck) {
+        onShowToast(data.error || 'Could not move slide');
+        return;
+      }
+      const nextIdx =
+        typeof data.newIndex === 'number'
+          ? data.newIndex
+          : direction === 'up'
+          ? Math.max(0, activeSlideIndex - 1)
+          : Math.min(data.deck.slides.length - 1, activeSlideIndex + 1);
+      setActiveSlideIndex(nextIdx);
+      if (data.checkReport) setCheckReport(data.checkReport);
+      await onDeckUpdated(data.deck);
+      setPreviewNonce(Date.now());
+      onShowToast(`Moved slide to position ${nextIdx + 1}`);
+    } finally {
+      setIsSavingSlide(false);
+    }
+  };
+
+  const onAddSlide = async () => {
+    if (!selectedDeck) {
+      onShowToast('Create or select a presentation first.');
+      return;
+    }
+    setIsSavingSlide(true);
+    try {
+      const res = await fetch(
+        `/api/decks/${encodeURIComponent(selectedDeck.slug)}/slides`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId: activeOrgId,
+            afterIndex: activeSlideIndex,
+            type: 'content',
+            title: 'New Brand-Aligned Slide',
+            lede: 'Key supporting evidence and takeaway.',
+          }),
+        }
+      );
+      const data = (await res.json()) as {
+        deck?: DeckSummary;
+        checkReport?: DeckCheckReportSummary;
+        insertedIndex?: number;
+        error?: string;
+      };
+      if (!res.ok || !data.deck) {
+        onShowToast(data.error || 'Could not add slide');
+        return;
+      }
+      const nextIdx =
+        typeof data.insertedIndex === 'number'
+          ? data.insertedIndex
+          : Math.min(data.deck.slides.length - 1, activeSlideIndex + 1);
+      setActiveSlideIndex(nextIdx);
+      if (data.checkReport) setCheckReport(data.checkReport);
+      await onDeckUpdated(data.deck);
+      setPreviewNonce(Date.now());
+      onShowToast(`Added Slide ${nextIdx + 1}`);
+    } finally {
+      setIsSavingSlide(false);
+    }
+  };
+
+  const onDeleteSlide = async () => {
+    if (!selectedDeck || selectedDeck.slides.length <= 1) return;
+    setIsSavingSlide(true);
+    try {
+      const res = await fetch(
+        `/api/decks/${encodeURIComponent(selectedDeck.slug)}/slides/${activeSlideIndex}?orgId=${encodeURIComponent(activeOrgId)}`,
+        {
+          method: 'DELETE',
+        }
+      );
+      const data = (await res.json()) as {
+        deck?: DeckSummary;
+        checkReport?: DeckCheckReportSummary;
+        error?: string;
+      };
+      if (!res.ok || !data.deck) {
+        onShowToast(data.error || 'Could not delete slide');
+        return;
+      }
+      const nextIdx = Math.min(activeSlideIndex, Math.max(0, data.deck.slides.length - 1));
+      setActiveSlideIndex(nextIdx);
+      if (data.checkReport) setCheckReport(data.checkReport);
+      await onDeckUpdated(data.deck);
+      setPreviewNonce(Date.now());
+      onShowToast(`Deleted slide (${data.deck.slides.length} remaining)`);
+    } finally {
+      setIsSavingSlide(false);
+    }
+  };
+
   const handleRunCheck = async () => {
     if (!selectedDeck) return;
     const res = await fetch(`/api/decks/${encodeURIComponent(selectedDeck.slug)}/check`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ orgId: activeOrgId }),
     });
     const report = (await res.json()) as DeckCheckReportSummary;
     setCheckReport(report);
@@ -962,6 +1230,60 @@ function StudioView({
                   </button>
                 </div>
 
+                <div
+                  className="slide-inspector-actions"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '6px',
+                    marginBottom: '12px',
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    id="move-slide-up-btn"
+                    disabled={!selectedDeck || activeSlideIndex === 0 || isSavingSlide}
+                    onClick={() => void onMoveSlide('up')}
+                  >
+                    ↑ Move Up
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    id="move-slide-down-btn"
+                    disabled={
+                      !selectedDeck ||
+                      activeSlideIndex >= selectedDeck.slides.length - 1 ||
+                      isSavingSlide
+                    }
+                    onClick={() => void onMoveSlide('down')}
+                  >
+                    ↓ Move Down
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    id="add-slide-btn"
+                    disabled={!selectedDeck || isSavingSlide}
+                    onClick={() => void onAddSlide()}
+                  >
+                    + Add Slide
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    id="delete-slide-btn"
+                    style={{ color: 'var(--negative)' }}
+                    disabled={
+                      !selectedDeck || selectedDeck.slides.length <= 1 || isSavingSlide
+                    }
+                    onClick={() => void onDeleteSlide()}
+                  >
+                    Delete Slide
+                  </button>
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div className="field-group">
                     <label className="field-label" htmlFor="inspector-slide-type">
@@ -1149,7 +1471,7 @@ function StudioView({
                 onClick={() => {
                   if (selectedDeck) {
                     window.open(
-                      `/api/decks/${encodeURIComponent(selectedDeck.slug)}/view`,
+                      `/api/decks/${encodeURIComponent(selectedDeck.slug)}/view?orgId=${encodeURIComponent(activeOrgId)}`,
                       '_blank'
                     );
                   }
@@ -1165,7 +1487,7 @@ function StudioView({
                 onClick={() => {
                   if (selectedDeck) {
                     window.open(
-                      `/api/decks/${encodeURIComponent(selectedDeck.slug)}/view?presenter=1`,
+                      `/api/decks/${encodeURIComponent(selectedDeck.slug)}/view?orgId=${encodeURIComponent(activeOrgId)}&presenter=1`,
                       '_blank',
                       'width=1280,height=820'
                     );
@@ -1179,7 +1501,7 @@ function StudioView({
                 id="viewer-export-zip"
                 href={
                   selectedDeck
-                    ? `/api/decks/${encodeURIComponent(selectedDeck.slug)}/export/zip`
+                    ? `/api/decks/${encodeURIComponent(selectedDeck.slug)}/export/zip?orgId=${encodeURIComponent(activeOrgId)}`
                     : '#'
                 }
                 download
@@ -1191,7 +1513,7 @@ function StudioView({
                 id="viewer-export-pdf"
                 href={
                   selectedDeck
-                    ? `/api/decks/${encodeURIComponent(selectedDeck.slug)}/export/pdf`
+                    ? `/api/decks/${encodeURIComponent(selectedDeck.slug)}/export/pdf?orgId=${encodeURIComponent(activeOrgId)}`
                     : '#'
                 }
                 download
@@ -1201,6 +1523,94 @@ function StudioView({
             </div>
           </div>
 
+          {(isBuilding || Boolean(lastBuildJob?.steps && lastBuildJob.steps.length > 0)) && (
+            <div
+              className="surface-card"
+              data-testid="agent-progress-stepper"
+              style={{ padding: '12px 16px', gap: '10px' }}
+            >
+              <div className="card-heading">
+                <span className="card-title" style={{ fontSize: '13.5px' }}>
+                  Agent Build Pipeline
+                </span>
+                <span
+                  className={`badge ${
+                    lastBuildJob?.status === 'failed'
+                      ? 'badge-fail'
+                      : isBuilding
+                      ? 'badge-warn'
+                      : 'badge-pass'
+                  }`}
+                >
+                  {isBuilding
+                    ? 'Building…'
+                    : lastBuildJob?.status === 'failed'
+                    ? 'Failed'
+                    : 'Verified'}
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: '8px',
+                }}
+              >
+                {resolveBuildStageStates(isBuilding, liveStageIndex, lastBuildJob).map(
+                  (stage) => {
+                    const isDone = stage.status === 'done';
+                    const isStageActive = stage.status === 'active';
+                    const isError = stage.status === 'error';
+                    return (
+                      <div
+                        key={stage.key}
+                        title={stage.detail || stage.label}
+                        data-stage-status={stage.status}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 10px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: `1px solid ${
+                            isStageActive
+                              ? 'var(--accent-border)'
+                              : isDone
+                              ? 'var(--positive)'
+                              : isError
+                              ? 'var(--negative)'
+                              : 'var(--border-subtle)'
+                          }`,
+                          backgroundColor: isStageActive
+                            ? 'var(--accent-soft)'
+                            : isDone
+                            ? 'var(--positive-soft)'
+                            : isError
+                            ? 'var(--negative-soft)'
+                            : 'var(--bg-canvas)',
+                          fontSize: '12px',
+                          fontWeight: isStageActive || isDone ? 600 : 500,
+                          color: isStageActive
+                            ? 'var(--accent)'
+                            : isDone
+                            ? 'var(--positive)'
+                            : isError
+                            ? 'var(--negative)'
+                            : 'var(--text-secondary)',
+                        }}
+                      >
+                        <span aria-hidden="true">
+                          {isDone ? '✓' : isStageActive ? '●' : isError ? '✕' : '○'}
+                        </span>
+                        <span>{stage.label}</span>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="stage-canvas-wrapper">
             <div className="preview-frame-wrap">
               {selectedDeck ? (
@@ -1209,7 +1619,7 @@ function StudioView({
                   id="studio-preview-iframe"
                   className="preview-iframe"
                   title="Interactive Deck Preview"
-                  src={`/api/decks/${encodeURIComponent(selectedDeck.slug)}/view?slide=${activeSlideIndex}&t=${previewNonce}`}
+                  src={`/api/decks/${encodeURIComponent(selectedDeck.slug)}/view?orgId=${encodeURIComponent(activeOrgId)}&slide=${activeSlideIndex}&t=${previewNonce}`}
                 />
               ) : (
                 <div
@@ -1335,6 +1745,7 @@ function StudioView({
 // ============================================================================
 interface BrandViewProps {
   isActive: boolean;
+  activeOrgId: string;
   brandKits: BrandKitSummary[];
   activeBrandKit: BrandKitSummary | null;
   quota: QuotaStatus | null;
@@ -1348,6 +1759,7 @@ interface BrandViewProps {
 
 function BrandView({
   isActive,
+  activeOrgId,
   brandKits,
   activeBrandKit,
   quota,
@@ -1404,6 +1816,7 @@ function BrandView({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        orgId: activeOrgId,
         updates: {
           colors,
           fonts: {
@@ -1487,6 +1900,7 @@ function BrandView({
   const handleCreateBrand = async () => {
     const name = newBrandName.trim() || 'CustomBrand';
     const fd = new FormData();
+    fd.append('orgId', activeOrgId);
     fd.append('createNew', 'true');
     fd.append('name', name);
     fd.append('companyName', name);
@@ -1526,6 +1940,7 @@ function BrandView({
       return;
     }
     const fd = new FormData();
+    fd.append('orgId', activeOrgId);
     fd.append('file', file);
     const res = await fetch('/api/brands/fonts', { method: 'POST', body: fd });
     const data = (await res.json()) as { notice?: string; error?: string };
@@ -1540,7 +1955,7 @@ function BrandView({
     const res = await fetch('/api/brands/clear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ orgId: activeOrgId }),
     });
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
@@ -1557,6 +1972,7 @@ function BrandView({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        orgId: activeOrgId,
         createNew: true,
         sampleTemplate: 'nordic-grid-corporate.pptx',
         name: 'Nordic Grid',
@@ -1584,7 +2000,7 @@ function BrandView({
     const res = await fetch('/api/gallery/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brandKitId: activeBrandKit?.id }),
+      body: JSON.stringify({ orgId: activeOrgId, brandKitId: activeBrandKit?.id }),
     });
     const report = (await res.json()) as DeckCheckReportSummary;
     onShowToast(report.humanSummary);
@@ -2011,7 +2427,7 @@ function BrandView({
                     id="brand-gallery-iframe"
                     className="preview-iframe"
                     title="Brand Kit Live Preview Gallery"
-                    src={`/api/gallery/preview?brandKitId=${encodeURIComponent(activeBrandKit.id)}&t=${galleryNonce}`}
+                    src={`/api/gallery/preview?orgId=${encodeURIComponent(activeOrgId)}&brandKitId=${encodeURIComponent(activeBrandKit.id)}&t=${galleryNonce}`}
                   />
                 ) : (
                   <div
@@ -2137,11 +2553,12 @@ function BrandView({
 // ============================================================================
 interface LibraryViewProps {
   isActive: boolean;
+  activeOrgId: string;
   decks: DeckSummary[];
   onOpenDeckInStudio: (deck: DeckSummary) => void;
 }
 
-function LibraryView({ isActive, decks, onOpenDeckInStudio }: LibraryViewProps) {
+function LibraryView({ isActive, activeOrgId, decks, onOpenDeckInStudio }: LibraryViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -2189,7 +2606,7 @@ function LibraryView({ isActive, decks, onOpenDeckInStudio }: LibraryViewProps) 
           <article className="deck-card" key={d.slug}>
             <div className="deck-card-thumb">
               <iframe
-                src={`/api/decks/${encodeURIComponent(d.slug)}/view?mode=thumbnail`}
+                src={`/api/decks/${encodeURIComponent(d.slug)}/view?orgId=${encodeURIComponent(activeOrgId)}&mode=thumbnail`}
                 loading="lazy"
                 title={d.title}
               />
@@ -2248,7 +2665,7 @@ function LibraryView({ isActive, decks, onOpenDeckInStudio }: LibraryViewProps) 
                 </button>
                 <a
                   className="btn btn-sm"
-                  href={`/api/decks/${encodeURIComponent(d.slug)}/view`}
+                  href={`/api/decks/${encodeURIComponent(d.slug)}/view?orgId=${encodeURIComponent(activeOrgId)}`}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -2256,7 +2673,7 @@ function LibraryView({ isActive, decks, onOpenDeckInStudio }: LibraryViewProps) 
                 </a>
                 <a
                   className="btn btn-sm"
-                  href={`/api/decks/${encodeURIComponent(d.slug)}/view?presenter=1`}
+                  href={`/api/decks/${encodeURIComponent(d.slug)}/view?orgId=${encodeURIComponent(activeOrgId)}&presenter=1`}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -2264,14 +2681,14 @@ function LibraryView({ isActive, decks, onOpenDeckInStudio }: LibraryViewProps) 
                 </a>
                 <a
                   className="btn btn-sm"
-                  href={`/api/decks/${encodeURIComponent(d.slug)}/export/zip`}
+                  href={`/api/decks/${encodeURIComponent(d.slug)}/export/zip?orgId=${encodeURIComponent(activeOrgId)}`}
                   download
                 >
                   ZIP
                 </a>
                 <a
                   className="btn btn-sm"
-                  href={`/api/decks/${encodeURIComponent(d.slug)}/export/pdf`}
+                  href={`/api/decks/${encodeURIComponent(d.slug)}/export/pdf?orgId=${encodeURIComponent(activeOrgId)}`}
                   download
                 >
                   PDF
@@ -2290,19 +2707,20 @@ function LibraryView({ isActive, decks, onOpenDeckInStudio }: LibraryViewProps) 
 // ============================================================================
 interface GalleryViewProps {
   isActive: boolean;
+  activeOrgId: string;
   activeBrandKit: BrandKitSummary | null;
 }
 
-function GalleryView({ isActive, activeBrandKit }: GalleryViewProps) {
+function GalleryView({ isActive, activeOrgId, activeBrandKit }: GalleryViewProps) {
   const [nonce, setNonce] = useState(() => Date.now());
 
   useEffect(() => {
     if (isActive) setNonce(Date.now());
-  }, [isActive, activeBrandKit?.id]);
+  }, [isActive, activeOrgId, activeBrandKit?.id]);
 
   const galleryUrl = activeBrandKit
-    ? `/api/gallery/preview?brandKitId=${encodeURIComponent(activeBrandKit.id)}&t=${nonce}`
-    : '/api/gallery/preview';
+    ? `/api/gallery/preview?orgId=${encodeURIComponent(activeOrgId)}&brandKitId=${encodeURIComponent(activeBrandKit.id)}&t=${nonce}`
+    : `/api/gallery/preview?orgId=${encodeURIComponent(activeOrgId)}`;
 
   return (
     <main id="view-gallery" className={`view-panel ${isActive ? 'active' : ''}`}>
@@ -2319,13 +2737,13 @@ function GalleryView({ isActive, activeBrandKit }: GalleryViewProps) {
               type="button"
               className="btn btn-sm btn-primary"
               id="gallery-fullscreen-btn"
-              onClick={() => window.open('/api/gallery/preview', '_blank')}
+              onClick={() => window.open(galleryUrl, '_blank')}
             >
               Present Fullscreen
             </button>
             <a
               className="btn btn-sm"
-              href="/api/gallery/preview"
+              href={galleryUrl}
               target="_blank"
               rel="noreferrer"
             >
@@ -2353,6 +2771,7 @@ function GalleryView({ isActive, activeBrandKit }: GalleryViewProps) {
 // ============================================================================
 interface WorkspaceViewProps {
   isActive: boolean;
+  activeOrgId: string;
   org: OrgSummary | null;
   quota: QuotaStatus | null;
   auditLog: AuditLogEntry[];
@@ -2362,6 +2781,7 @@ interface WorkspaceViewProps {
 
 function WorkspaceView({
   isActive,
+  activeOrgId,
   org,
   quota,
   auditLog,
@@ -2408,7 +2828,7 @@ function WorkspaceView({
     const res = await fetch('/api/subscription', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tier }),
+      body: JSON.stringify({ orgId: activeOrgId, tier }),
     });
     if (res.ok) {
       await onRefreshBootstrap();
@@ -2421,6 +2841,7 @@ function WorkspaceView({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        orgId: activeOrgId,
         planCatalog: {
           starter: { maxBrands: starterBrands, dailyDeckLimit: starterDecks },
           pro: { maxBrands: proBrands, dailyDeckLimit: proDecks },
@@ -2438,7 +2859,7 @@ function WorkspaceView({
     const res = await fetch('/api/subscription', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resetTodayUsage: true }),
+      body: JSON.stringify({ orgId: activeOrgId, resetTodayUsage: true }),
     });
     if (res.ok) {
       await onRefreshBootstrap();
@@ -2451,6 +2872,7 @@ function WorkspaceView({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        orgId: activeOrgId,
         role,
         llmConfig: {
           provider: llmProvider,
@@ -2469,7 +2891,7 @@ function WorkspaceView({
     const res = await fetch('/api/org/llm-test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ orgId: activeOrgId }),
     });
     const data = (await res.json().catch(() => ({}))) as {
       message?: string;
@@ -2685,7 +3107,7 @@ function WorkspaceView({
               <span className="card-title">Unit Economics &amp; Cost Telemetry</span>
               <a
                 className="btn btn-sm"
-                href="/api/subscription/cost-export.csv"
+                href={`/api/subscription/cost-export.csv?orgId=${encodeURIComponent(activeOrgId)}`}
                 download
               >
                 ⬇ Export Cost CSV
@@ -2997,6 +3419,7 @@ function QuotaUpgradeModal({ message, onClose, onUpgradeTier }: QuotaModalProps)
 // ============================================================================
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(loadInitialTheme);
+  const [activeOrgId, setActiveOrgId] = useState<string>(loadInitialOrgId);
   const [currentView, setCurrentView] = useState<AppViewName>('studio');
 
   const [org, setOrg] = useState<OrgSummary | null>(null);
@@ -3033,7 +3456,7 @@ export default function App() {
 
   const refreshBootstrap = useCallback(async () => {
     try {
-      const res = await fetch('/api/bootstrap');
+      const res = await fetch(`/api/bootstrap?orgId=${encodeURIComponent(activeOrgId)}`);
       if (!res.ok) return;
       const data = (await res.json()) as BootstrapPayload;
       const nextDecks = data.decks || [];
@@ -3046,20 +3469,34 @@ export default function App() {
       setSampleTemplates(data.sampleTemplates || []);
 
       setSelectedDeck((prev) => {
-        if (!prev && nextDecks.length > 0) return nextDecks[0];
-        if (prev) {
-          return nextDecks.find((d) => d.slug === prev.slug) || prev;
-        }
-        return null;
+        if (!prev) return nextDecks[0] || null;
+        return nextDecks.find((d) => d.slug === prev.slug) || nextDecks[0] || null;
       });
     } catch {
       // ignore initial offline bootstrap failure in standalone preview
     }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => {
     void refreshBootstrap();
   }, [refreshBootstrap]);
+
+  const handleSwitchOrg = useCallback(
+    (nextOrgId: string) => {
+      const normalized = nextOrgId || 'default-org';
+      try {
+        localStorage.setItem(ORG_STORAGE_KEY, normalized);
+      } catch {
+        // ignore storage errors
+      }
+      setSelectedDeck(null);
+      setActiveOrgId(normalized);
+      const label =
+        WORKSPACE_OPTIONS.find((w) => w.id === normalized)?.label || normalized;
+      showToast(`Switched workspace to ${label}`);
+    },
+    [showToast]
+  );
 
   const handleSelectBrandKit = useCallback(
     async (brandKitId: string) => {
@@ -3067,7 +3504,7 @@ export default function App() {
       const res = await fetch('/api/brands/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brandKitId }),
+        body: JSON.stringify({ orgId: activeOrgId, brandKitId }),
       });
       if (res.ok) {
         await refreshBootstrap();
@@ -3075,7 +3512,7 @@ export default function App() {
         showToast(`Switched brand to ${chosen?.name || brandKitId}`);
       }
     },
-    [brandKits, refreshBootstrap, showToast]
+    [activeOrgId, brandKits, refreshBootstrap, showToast]
   );
 
   const handleUpgradeFromModal = useCallback(
@@ -3083,7 +3520,7 @@ export default function App() {
       const res = await fetch('/api/subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ orgId: activeOrgId, tier }),
       });
       if (res.ok) {
         await refreshBootstrap();
@@ -3093,7 +3530,7 @@ export default function App() {
         showToast('Could not switch subscription tier');
       }
     },
-    [refreshBootstrap, showToast]
+    [activeOrgId, refreshBootstrap, showToast]
   );
 
   return (
@@ -3101,6 +3538,8 @@ export default function App() {
       <TopBar
         currentView={currentView}
         onSwitchView={setCurrentView}
+        activeOrgId={activeOrgId}
+        onSwitchOrg={handleSwitchOrg}
         brandKits={brandKits}
         activeBrandKit={activeBrandKit}
         onSelectBrand={(id) => void handleSelectBrandKit(id)}
@@ -3111,6 +3550,7 @@ export default function App() {
 
       <StudioView
         isActive={currentView === 'studio'}
+        activeOrgId={activeOrgId}
         brandKits={brandKits}
         activeBrandKit={activeBrandKit}
         selectedDeck={selectedDeck}
@@ -3125,6 +3565,7 @@ export default function App() {
 
       <BrandView
         isActive={currentView === 'brand'}
+        activeOrgId={activeOrgId}
         brandKits={brandKits}
         activeBrandKit={activeBrandKit}
         quota={quota}
@@ -3138,6 +3579,7 @@ export default function App() {
 
       <LibraryView
         isActive={currentView === 'library'}
+        activeOrgId={activeOrgId}
         decks={decks}
         onOpenDeckInStudio={(deck) => {
           setSelectedDeck(deck);
@@ -3147,11 +3589,13 @@ export default function App() {
 
       <GalleryView
         isActive={currentView === 'gallery'}
+        activeOrgId={activeOrgId}
         activeBrandKit={activeBrandKit}
       />
 
       <WorkspaceView
         isActive={currentView === 'saas'}
+        activeOrgId={activeOrgId}
         org={org}
         quota={quota}
         auditLog={auditLog}

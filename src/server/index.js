@@ -84,6 +84,7 @@ export function createApp() {
 
       res.json({
         org: state.org,
+        organisations: storage.listOrganisations(),
         quota,
         brandKits,
         activeBrandKit,
@@ -92,6 +93,33 @@ export function createApp() {
         sampleTemplates,
         availableWebFonts: [...WEB_AVAILABLE_FONTS],
         mcpTools: MCP_TOOLS
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.get('/api/orgs', (req, res, next) => {
+    try {
+      res.json({ organisations: storage.listOrganisations() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post('/api/orgs', async (req, res, next) => {
+    try {
+      const rawId = req.body?.orgId || req.body?.name || 'custom-org';
+      const orgId = slugifyDeckName(rawId, 'custom-org');
+      const state = storage.loadOrgState(orgId);
+      if (req.body?.name) {
+        state.org.name = String(req.body.name);
+        storage.saveOrgState(orgId, state);
+      }
+      res.json({
+        org: state.org,
+        organisations: storage.listOrganisations(),
+        quota: storage.getQuotaStatus(orgId)
       });
     } catch (err) {
       next(err);
@@ -737,6 +765,54 @@ export function createApp() {
       });
 
       res.json({ deck: savedDeck, checkReport });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Add Slide (Issue #25)
+  app.post('/api/decks/:slug/slides', async (req, res, next) => {
+    try {
+      const orgId = req.body?.orgId || req.query?.orgId || 'default-org';
+      const { deck, insertedIndex } = storage.addSlideToDeck(orgId, req.params.slug, req.body || {});
+      const brandKit = storage.getActiveBrandKit(orgId, deck.brandKitId, deck.brandKitVersion);
+      const html = compileDeckToHtml(deck, brandKit, { inlineRuntime: true });
+      const deckDir = storage.getDeckDir(orgId, deck.slug);
+      fs.writeFileSync(path.join(deckDir, 'index.html'), html, 'utf8');
+      res.json({ deck, insertedIndex });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Delete Slide (Issue #25)
+  app.delete('/api/decks/:slug/slides/:slideIndex', async (req, res, next) => {
+    try {
+      const orgId = req.body?.orgId || req.query?.orgId || 'default-org';
+      const idx = parseInt(req.params.slideIndex, 10);
+      const { deck } = storage.deleteSlideFromDeck(orgId, req.params.slug, idx);
+      const brandKit = storage.getActiveBrandKit(orgId, deck.brandKitId, deck.brandKitVersion);
+      const html = compileDeckToHtml(deck, brandKit, { inlineRuntime: true });
+      const deckDir = storage.getDeckDir(orgId, deck.slug);
+      fs.writeFileSync(path.join(deckDir, 'index.html'), html, 'utf8');
+      res.json({ deck });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Move / Reorder Slide Up or Down (Issue #25)
+  app.post('/api/decks/:slug/slides/:slideIndex/move', async (req, res, next) => {
+    try {
+      const orgId = req.body?.orgId || req.query?.orgId || 'default-org';
+      const idx = parseInt(req.params.slideIndex, 10);
+      const direction = req.body?.direction === 'down' ? 'down' : 'up';
+      const { deck, newIndex } = storage.moveSlideInDeck(orgId, req.params.slug, idx, direction);
+      const brandKit = storage.getActiveBrandKit(orgId, deck.brandKitId, deck.brandKitVersion);
+      const html = compileDeckToHtml(deck, brandKit, { inlineRuntime: true });
+      const deckDir = storage.getDeckDir(orgId, deck.slug);
+      fs.writeFileSync(path.join(deckDir, 'index.html'), html, 'utf8');
+      res.json({ deck, newIndex });
     } catch (err) {
       next(err);
     }

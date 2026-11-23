@@ -181,6 +181,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health_handler))
         .route("/api/bootstrap", get(bootstrap_handler))
+        .route("/api/orgs", get(list_orgs_handler).post(create_org_handler))
         .route(
             "/api/subscription",
             get(get_subscription_handler).post(update_subscription_handler),
@@ -208,9 +209,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/decks/:slug/edit", post(edit_deck_handler))
         .route("/api/decks/:slug/revert", post(revert_deck_handler))
         .route("/api/decks/:slug/check", post(check_deck_handler))
+        .route("/api/decks/:slug/slides", post(add_deck_slide_handler))
         .route(
             "/api/decks/:slug/slides/:slide_index",
-            put(update_deck_slide_handler),
+            put(update_deck_slide_handler).delete(delete_deck_slide_handler),
+        )
+        .route(
+            "/api/decks/:slug/slides/:slide_index/move",
+            post(move_deck_slide_handler),
         )
         .route("/api/decks/:slug/view", get(view_deck_handler))
         .route("/api/decks/:slug/export/zip", get(export_deck_zip_handler))
@@ -248,11 +254,43 @@ async fn bootstrap_handler(
 
     Ok(Json(json!({
         "org": org,
+        "organisations": state.db.list_organisations().unwrap_or_default(),
         "quota": quota,
         "brandKits": brand_kits,
         "activeBrandKit": active_brand_kit,
         "decks": decks,
         "auditLog": audit_log
+    })))
+}
+
+async fn list_orgs_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, ApiError> {
+    let orgs = state.db.list_organisations()?;
+    Ok(Json(json!({ "organisations": orgs })))
+}
+
+async fn create_org_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let raw_id = payload
+        .get("orgId")
+        .or_else(|| payload.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("custom-org");
+    let org_id = slugify(raw_id);
+    let org = state.db.update_org_settings(
+        &org_id,
+        payload.get("name").and_then(|v| v.as_str()),
+        None,
+    )?;
+    let quota = state.db.get_quota_status(&org_id)?;
+    let orgs = state.db.list_organisations()?;
+    Ok(Json(json!({
+        "org": org,
+        "organisations": orgs,
+        "quota": quota
     })))
 }
 
@@ -580,6 +618,71 @@ async fn update_deck_slide_handler(
     Ok(Json(json!({
         "deck": updated_deck,
         "checkReport": check_report
+    })))
+}
+
+async fn add_deck_slide_handler(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+    Query(query): Query<OrgQuery>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .get("orgId")
+        .or_else(|| payload.get("org_id"))
+        .and_then(|v| v.as_str())
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+    let after_index = payload
+        .get("afterIndex")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize);
+    let slide_type = payload.get("type").and_then(|v| v.as_str());
+    let title = payload.get("title").and_then(|v| v.as_str());
+    let lede = payload.get("lede").and_then(|v| v.as_str());
+
+    let (deck, inserted_index) =
+        state
+            .db
+            .add_deck_slide(org_id, &slug, after_index, slide_type, title, lede)?;
+    Ok(Json(json!({
+        "deck": deck,
+        "insertedIndex": inserted_index
+    })))
+}
+
+async fn delete_deck_slide_handler(
+    State(state): State<Arc<AppState>>,
+    Path((slug, slide_index)): Path<(String, usize)>,
+    Query(query): Query<OrgQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = query.org_id.as_deref().unwrap_or("default-org");
+    let deck = state.db.delete_deck_slide(org_id, &slug, slide_index)?;
+    Ok(Json(json!({ "deck": deck })))
+}
+
+async fn move_deck_slide_handler(
+    State(state): State<Arc<AppState>>,
+    Path((slug, slide_index)): Path<(String, usize)>,
+    Query(query): Query<OrgQuery>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let org_id = payload
+        .get("orgId")
+        .or_else(|| payload.get("org_id"))
+        .and_then(|v| v.as_str())
+        .or(query.org_id.as_deref())
+        .unwrap_or("default-org");
+    let direction = payload
+        .get("direction")
+        .and_then(|v| v.as_str())
+        .unwrap_or("up");
+    let (deck, new_index) = state
+        .db
+        .move_deck_slide(org_id, &slug, slide_index, direction)?;
+    Ok(Json(json!({
+        "deck": deck,
+        "newIndex": new_index
     })))
 }
 
@@ -1728,5 +1831,61 @@ mod tests {
                 .active_brand_kit_id,
             Some("brand-alpha".to_string())
         );
+    }
+
+    #[test]
+    fn test_phase6_orgs_and_slide_reorder_add_delete() {
+        use crate::compiler::{default_brand_kit_for_org, synthesize_deck_from_brief};
+
+        let db = Database::open_in_memory().expect("in-memory sqlite");
+        let orgs = db.list_organisations().expect("list organisations");
+        assert!(orgs.iter().any(|o| o.id == "default-org"));
+        assert!(orgs.iter().any(|o| o.id == "nordic-labs"));
+        assert!(orgs.iter().any(|o| o.id == "atelier-studio"));
+
+        let org_id = "nordic-labs";
+        let brand = default_brand_kit_for_org(org_id);
+        db.save_brand_kit(&brand).expect("save brand");
+
+        let deck = synthesize_deck_from_brief(
+            "phase6-deck",
+            "Multi-Tenant Architecture & Slide Reorder Verification",
+            "Engineering",
+            &brand,
+        );
+        let saved = db.save_deck(&deck, true).expect("save deck");
+        assert_eq!(saved.slides.len(), 8);
+
+        // 1. Add a slide after index 1 -> inserted at index 2 (9 slides total)
+        let (added_deck, inserted_idx) = db
+            .add_deck_slide(
+                org_id,
+                "phase6-deck",
+                Some(1),
+                Some("content-alt"),
+                Some("Inserted Slide 3"),
+                Some("Inserted via Slide Inspector."),
+            )
+            .expect("add slide");
+        assert_eq!(inserted_idx, 2);
+        assert_eq!(added_deck.slides.len(), 9);
+        assert_eq!(added_deck.slides[2].title, "Inserted Slide 3");
+
+        // 2. Move slide 2 up to index 1
+        let (moved_deck, new_idx) = db
+            .move_deck_slide(org_id, "phase6-deck", 2, "up")
+            .expect("move slide up");
+        assert_eq!(new_idx, 1);
+        assert_eq!(moved_deck.slides[1].title, "Inserted Slide 3");
+
+        // 3. Delete slide at index 1 -> back to 8 slides
+        let after_del = db
+            .delete_deck_slide(org_id, "phase6-deck", 1)
+            .expect("delete slide");
+        assert_eq!(after_del.slides.len(), 8);
+        assert!(after_del
+            .slides
+            .iter()
+            .all(|s| s.title != "Inserted Slide 3"));
     }
 }

@@ -812,6 +812,193 @@ export class StorageService {
     });
     return true;
   }
+
+  /**
+   * Lists known multi-tenant workspaces (Issue #24) with quota summaries.
+   */
+  listOrganisations() {
+    const presetOrgs = [
+      { id: 'default-org', defaultName: 'Default Workspace' },
+      { id: 'nordic-labs', defaultName: 'Nordic Labs' },
+      { id: 'atelier-studio', defaultName: 'Atelier Studio' }
+    ];
+    const seen = new Set(presetOrgs.map((o) => o.id));
+    const orgsRoot = path.join(this.baseDataDir, 'orgs');
+    if (fs.existsSync(orgsRoot)) {
+      for (const entry of fs.readdirSync(orgsRoot, { withFileTypes: true })) {
+        if (entry.isDirectory() && !seen.has(entry.name) && !entry.name.startsWith('test-')) {
+          seen.add(entry.name);
+          presetOrgs.push({ id: entry.name, defaultName: entry.name });
+        }
+      }
+    }
+
+    return presetOrgs.map(({ id, defaultName }) => {
+      const state = this.loadOrgState(id);
+      const quota = this.getQuotaStatus(id);
+      return {
+        id,
+        name: state.org?.name && state.org.name !== 'Nordic Grid Enterprise' ? state.org.name : defaultName,
+        tier: quota.tier,
+        tierName: quota.tierName,
+        usedBrands: quota.usedBrands,
+        maxBrands: quota.maxBrands,
+        usedDecksToday: quota.usedDecksToday,
+        dailyDeckLimit: quota.dailyDeckLimit
+      };
+    });
+  }
+
+  /**
+   * Inserts a new slide into an existing deck (Issue #25).
+   */
+  addSlideToDeck(orgId, deckSlug, payload = {}) {
+    assertValidDeckSlug(deckSlug);
+    const deck = this.getDeck(orgId, deckSlug);
+    if (!deck) {
+      const err = new Error(`Deck "${deckSlug}" not found.`);
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const slides = Array.isArray(deck.slides) ? [...deck.slides] : [];
+    const afterIdx =
+      typeof payload.afterIndex === 'number' && Number.isFinite(payload.afterIndex)
+        ? Math.max(0, Math.min(slides.length - 1, payload.afterIndex))
+        : Math.max(0, slides.length - 2);
+    const insertIdx = slides.length === 0 ? 0 : Math.min(slides.length, afterIdx + 1);
+
+    const newSlide = {
+      id: `slide-custom-${Date.now()}`,
+      type: payload.type || 'content',
+      eyebrow: payload.eyebrow || `0${insertIdx + 1} · KEY POINT`,
+      eyebrowIcon: 'sparkle',
+      title: payload.title || 'New Brand-Aligned Slide',
+      lede: payload.lede || 'Supporting factual context and decision takeaway.',
+      speakerNotes: payload.speakerNotes || 'Added via Slide Inspector.',
+      components: Array.isArray(payload.components) && payload.components.length > 0
+        ? payload.components
+        : [
+            {
+              type: 'bullets',
+              items: [
+                payload.lede || 'Supporting factual context and decision takeaway.',
+                'Verified against active Brand CVI palette and 1600×900 stage geometry.'
+              ]
+            }
+          ]
+    };
+
+    slides.splice(insertIdx, 0, newSlide);
+    const saved = this.saveDeck(
+      orgId,
+      {
+        ...deck,
+        slides
+      },
+      {
+        createHistorySnapshot: true,
+        historyNote: `Added Slide ${insertIdx + 1}`
+      }
+    );
+    this.appendAudit(orgId, {
+      action: 'deck.slide_added',
+      target: `${deckSlug}#slide-${insertIdx + 1}`,
+      detail: `Added slide "${newSlide.title}" at position ${insertIdx + 1}`
+    });
+    return { deck: saved, insertedIndex: insertIdx };
+  }
+
+  /**
+   * Deletes a slide at slideIndex from an existing deck (Issue #25).
+   */
+  deleteSlideFromDeck(orgId, deckSlug, slideIndex) {
+    assertValidDeckSlug(deckSlug);
+    const deck = this.getDeck(orgId, deckSlug);
+    if (!deck) {
+      const err = new Error(`Deck "${deckSlug}" not found.`);
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const slides = Array.isArray(deck.slides) ? [...deck.slides] : [];
+    if (slides.length <= 1) {
+      const err = new Error('A presentation must contain at least 1 slide.');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (slideIndex < 0 || slideIndex >= slides.length) {
+      const err = new Error(`Slide index ${slideIndex} is out of bounds.`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const [removed] = slides.splice(slideIndex, 1);
+    const saved = this.saveDeck(
+      orgId,
+      {
+        ...deck,
+        slides
+      },
+      {
+        createHistorySnapshot: true,
+        historyNote: `Deleted Slide ${slideIndex + 1}`
+      }
+    );
+    this.appendAudit(orgId, {
+      action: 'deck.slide_deleted',
+      target: `${deckSlug}#slide-${slideIndex + 1}`,
+      detail: `Deleted slide "${removed?.title || slideIndex + 1}"`
+    });
+    return { deck: saved };
+  }
+
+  /**
+   * Moves a slide up or down in an existing deck (Issue #25).
+   */
+  moveSlideInDeck(orgId, deckSlug, slideIndex, direction = 'up') {
+    assertValidDeckSlug(deckSlug);
+    const deck = this.getDeck(orgId, deckSlug);
+    if (!deck) {
+      const err = new Error(`Deck "${deckSlug}" not found.`);
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const slides = Array.isArray(deck.slides) ? [...deck.slides] : [];
+    if (slideIndex < 0 || slideIndex >= slides.length) {
+      const err = new Error(`Slide index ${slideIndex} is out of bounds.`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const targetIndex = direction === 'down' ? slideIndex + 1 : slideIndex - 1;
+    if (targetIndex < 0 || targetIndex >= slides.length) {
+      return { deck, newIndex: slideIndex };
+    }
+
+    const temp = slides[slideIndex];
+    slides[slideIndex] = slides[targetIndex];
+    slides[targetIndex] = temp;
+
+    const saved = this.saveDeck(
+      orgId,
+      {
+        ...deck,
+        slides
+      },
+      {
+        createHistorySnapshot: true,
+        historyNote: `Moved Slide ${slideIndex + 1} ${direction}`
+      }
+    );
+    this.appendAudit(orgId, {
+      action: 'deck.slide_moved',
+      target: `${deckSlug}#slide-${targetIndex + 1}`,
+      detail: `Moved slide from #${slideIndex + 1} to #${targetIndex + 1}`
+    });
+    return { deck: saved, newIndex: targetIndex };
+  }
 }
 
 export const storage = new StorageService();
