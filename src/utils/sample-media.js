@@ -94,6 +94,11 @@ export async function ensureSampleMediaAssets() {
     }
   }
 
+  const aliasVideoPath = path.join(SAMPLE_MEDIA_DIR, 'sample-demo.mp4');
+  if (fs.existsSync(videoPath) && !fs.existsSync(aliasVideoPath)) {
+    fs.copyFileSync(videoPath, aliasVideoPath);
+  }
+
   return [
     {
       id: 'sample-shot-1',
